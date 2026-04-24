@@ -1,0 +1,446 @@
+/* ============================================================
+   Brevet Sales Simulation — Global Design System
+   Light theme is default. Add .dark class to switch to dark theme.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* Light theme (default) */
+  --canvas: #FAFAF7;
+  --canvas-inverse: #1F3541;
+  --surface: #FFFFFF;
+  --surface-2: #F4F1EC;
+  --ink: #0F1B22;
+  --ink-2: #4A5963;
+  --ink-3: #8A95A0;
+  --border: #E8E4DD;
+  --border-strong: #C9C3B9;
+  --accent: #E85D2E;
+  --accent-deep: #C24515;
+  --accent-soft: #FCE9DF;
+  --r1-slate: #2D4A5B;
+  --r2-umber: #8B6F47;
+  --r3-forest: #3D5F3D;
+  --r4-plum: #6B4668;
+  --success: #3E8E5A;
+  --amber: #C88A2C;
+
+  /* Motion */
+  --ease-entry: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-state: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Elevation */
+  --elevation-1: 0 1px 2px rgba(15,27,34,0.04), 0 1px 3px rgba(15,27,34,0.03);
+  --elevation-2: 0 2px 4px rgba(15,27,34,0.05), 0 4px 12px rgba(15,27,34,0.06);
+}
+
+/* Dark theme overrides — apply by adding .dark to body or a container */
+.dark {
+  --canvas: #1A2C36;
+  --canvas-deep: #13222B;
+  --canvas-inverse: #FAFAF7;
+  --surface: rgba(255,255,255,0.04);
+  --surface-2: rgba(255,255,255,0.06);
+  --surface-hover: rgba(255,255,255,0.08);
+  --ink: #F4F1EC;
+  --ink-2: rgba(244,241,236,0.68);
+  --ink-3: rgba(244,241,236,0.45);
+  --border: rgba(255,255,255,0.10);
+  --border-strong: rgba(255,255,255,0.22);
+  --accent-deep: #FF7A4E;
+  --elevation-1: 0 1px 2px rgba(0,0,0,0.25), 0 1px 3px rgba(0,0,0,0.2);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+body.dark {
+  background: var(--canvas-deep, #13222B);
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.display {
+  font-family: 'Inter Tight', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input, textarea {
+  font-family: inherit;
+}
+
+/* Accessibility */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+
+/* Utility: visually hidden but accessible to screen readers */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Entry animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.08); }
+}
+
+@keyframes caret-blink {
+  50% { opacity: 0; }
+}
+
+/* ============================================================
+   Scenario Brief — static styles (moved out of styled-jsx
+   to avoid scoping issues)
+   ============================================================ */
+
+.sb-outer {
+  width: 100%;
+  min-width: 1440px;
+  background: var(--canvas);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.sb-page {
+  width: 1440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* Hero */
+.sb-hero {
+  position: relative;
+  height: 180px;
+  background: var(--canvas-inverse);
+  color: #fff;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  column-gap: 64px;
+  align-items: center;
+  padding: 0 80px;
+  overflow: hidden;
+  flex-shrink: 0;
+  animation: fadeUp 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.sb-hero-shader {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.06;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+.sb-hero-grain {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0'/></filter><rect width='180' height='180' filter='url(%23n)'/></svg>");
+  opacity: 0.03;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
+.sb-hero-left {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  overflow: hidden;
+}
+.sb-hero-badge {
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.12em;
+  margin-bottom: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-hero-title {
+  font-family: "Inter Tight", sans-serif;
+  font-weight: 700;
+  font-size: clamp(40px, 4.2vw, 60px);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin-bottom: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  animation: fadeUp 700ms cubic-bezier(0.22, 1, 0.36, 1) 200ms forwards;
+}
+.sb-hero-sub {
+  font-size: 17px;
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 400;
+  opacity: 0;
+  animation: fadeUp 700ms cubic-bezier(0.22, 1, 0.36, 1) 600ms forwards;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-hero-right {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  flex-wrap: nowrap;
+}
+.sb-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  white-space: nowrap;
+}
+.sb-stat-num {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 500;
+  font-size: 38px;
+  line-height: 1;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.sb-stat.sb-urgent .sb-stat-num {
+  color: var(--accent);
+}
+.sb-stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+}
+.sb-stat-divider {
+  width: 1px;
+  height: 52px;
+  background: rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+/* Personas */
+.sb-personas {
+  position: relative;
+  padding: 32px 80px 0;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  animation: fadeUp 600ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
+}
+.sb-personas-header {
+  margin-bottom: 24px;
+}
+.sb-personas-label {
+  margin-bottom: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.sb-personas-header h2 {
+  font-family: "Inter Tight", sans-serif;
+  font-weight: 700;
+  font-size: 36px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.sb-personas-header .sb-sub {
+  font-size: 16px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+.sb-personas-row {
+  display: grid;
+  grid-template-columns: repeat(3, 400px);
+  gap: 32px;
+  justify-content: center;
+  perspective: 1800px;
+  padding-bottom: 32px;
+}
+
+/* Closing */
+.sb-closing {
+  padding: 24px 80px 32px;
+  border-top: 1px solid var(--border);
+  background: var(--canvas);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: fadeUp 600ms cubic-bezier(0.22, 1, 0.36, 1) 160ms both;
+}
+.sb-closing-row {
+  display: grid;
+  grid-template-columns: 60% 40%;
+  gap: 56px;
+  align-items: start;
+}
+.sb-closing-label {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.sb-mission-statement {
+  font-family: "Inter Tight", sans-serif;
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  max-width: 720px;
+}
+.sb-framework-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 10px;
+  max-width: 420px;
+}
+.sb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  transition: border-color 150ms var(--ease-state);
+  height: 32px;
+  white-space: nowrap;
+}
+.sb-chip:hover {
+  border-color: var(--border-strong);
+}
+.sb-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--r1-slate);
+  flex-shrink: 0;
+}
+.sb-chip-num {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0;
+}
+.sb-cta-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+.sb-btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 28px;
+  font-family: "Inter", sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  transition: background 200ms var(--ease-state), transform 150ms var(--ease-state);
+  box-shadow: 0 4px 14px rgba(232, 93, 46, 0.25);
+}
+.sb-btn-primary:hover {
+  background: var(--accent-deep);
+  transform: translateY(-2px);
+}
+.sb-cta-note {
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
