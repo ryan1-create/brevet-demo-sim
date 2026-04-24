@@ -5,9 +5,12 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
+  timeout: 25_000, // 25s — fail fast instead of hanging
+  maxRetries: 1,
 });
 
-export const maxDuration = 30;
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 function addJitter(baseDelay, jitterPercent = 0.3) {
   const jitter = baseDelay * jitterPercent * (Math.random() - 0.5) * 2;
@@ -259,16 +262,32 @@ Respond in EXACT JSON (no other text):
   "coachChallenge": "[Thought-provoking question tied to their specific gaps]"
 }`;
 
-    const response = await callWithRetry(async () => {
-      return await anthropic.messages.create({
-        model: "claude-sonnet-4-20250514",
+    console.log("Scoring request received for client:", scenario.client?.name);
+
+    let response;
+    try {
+      response = await anthropic.messages.create({
+        model: "claude-sonnet-4-5-20250929",
         max_tokens: 2500,
         temperature: 0.3,
         messages: [{ role: "user", content: scoringPrompt }],
         system: systemPrompt,
       });
-    });
+    } catch (apiError) {
+      console.error("Anthropic API error:", apiError?.message || apiError);
+      console.error("Error status:", apiError?.status);
+      console.error("Error type:", apiError?.type);
+      return Response.json(
+        {
+          error: "Claude scoring failed",
+          detail: apiError?.message || "Unknown error",
+          status: apiError?.status,
+        },
+        { status: 500 }
+      );
+    }
 
+    console.log("Claude response received, length:", response?.content?.[0]?.text?.length);
     const aiText = response.content[0].text;
     let aiResult;
     try {
