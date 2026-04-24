@@ -1,12 +1,11 @@
-// Brevet Sales Simulation — AI Scoring Endpoint
-// Simple, direct, with hard timeout guarantee and aggressive logging.
+// Brevet Sales Simulation — AI Scoring Endpoint (App Router version)
+// Mirrors /api/score.js — whichever Vercel routes to, the result is the same.
 
 import Anthropic from "@anthropic-ai/sdk";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Hard timeout wrapper — guarantees no hang, regardless of SDK behavior
 function withHardTimeout(promise, ms, label = "operation") {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -18,7 +17,6 @@ function withHardTimeout(promise, ms, label = "operation") {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-// Quality gate for garbage submissions
 function assessSubmissionQuality(submission) {
   const fullText = (submission || "").trim();
   if (!fullText) return { quality: "empty", score: 5, skipAI: true };
@@ -58,9 +56,7 @@ function assessSubmissionQuality(submission) {
 function generateGarbageScore(criteria, qualityResult) {
   const baseScore = qualityResult.score;
   const criteriaScores = {};
-  criteria.forEach((c) => {
-    criteriaScores[c.name] = baseScore;
-  });
+  criteria.forEach((c) => { criteriaScores[c.name] = baseScore; });
   const feedbackByQuality = {
     empty: "There's no submission to coach on. Please walk through the framework and give me your team's real thinking.",
     garbage: "This doesn't read like a genuine attempt. Take another pass — think about what you'd actually say if you were sitting across from this CEO.",
@@ -101,37 +97,31 @@ function validateAndAdjustScores(scores) {
 }
 
 export async function POST(req) {
-  console.log("[score] POST received");
+  console.log("[score:app] POST received");
 
   let body;
   try {
     body = await req.json();
   } catch (e) {
-    console.error("[score] Failed to parse request body:", e.message);
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const { submission, scenario } = body;
-  console.log("[score] Client:", scenario?.client?.name, "submission length:", submission?.length);
+  console.log("[score:app] Client:", scenario?.client?.name);
 
   if (!submission || !scenario) {
-    console.error("[score] Missing submission or scenario");
-    return Response.json({ error: "Missing submission or scenario data" }, { status: 400 });
+    return Response.json({ error: "Missing submission or scenario" }, { status: 400 });
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("[score] ANTHROPIC_API_KEY not set");
     return Response.json({ error: "Server missing API key" }, { status: 500 });
   }
 
-  // Quality gate — garbage submissions get auto-scored without hitting Claude
   const qualityResult = assessSubmissionQuality(submission);
   if (qualityResult.skipAI) {
-    console.log("[score] Quality gate triggered:", qualityResult.quality);
     return Response.json(generateGarbageScore(scenario.motion.scoringCriteria, qualityResult));
   }
 
-  // Build the scoring prompt
   const systemPrompt = `You are an elite sales coach at Brevet, a consulting firm that teaches Business Value Selling. You have 25+ years of experience training sellers to engage business buyers — not procurement, not champions below the decision line, but the actual executives who make budget decisions.
 
 Evaluate the team's response like a real coach — honest, direct, grounded in Brevet's methodology.
@@ -140,10 +130,10 @@ Evaluate the team's response like a real coach — honest, direct, grounded in B
 Legacy Displacement is about creating the buying decision by making the cost of the status quo unavoidable. Great responses quantify status-quo cost, connect to strategic priorities, speak executive language, and offer credible parallels. Weak responses lead with features, treat it as procurement, miss the customer context, or stay operational.
 
 ## SCORING (use the full 10-100 range)
-- 90-100 Championship Caliber: specific customer references, business outcome framing, strategic clarity
-- 75-89 Strong Contender: customer-specific, connects to priorities, grounded recommendations
-- 55-74 Building Momentum: generic; could apply to any customer
-- 35-54 Foundation Phase: feature-centric, ignores context
+- 90-100 Championship Caliber
+- 75-89 Strong Contender
+- 55-74 Building Momentum
+- 35-54 Foundation Phase
 - 10-34 Not a genuine attempt
 
 ## RULES
@@ -154,14 +144,13 @@ Legacy Displacement is about creating the buying decision by making the cost of 
 5. Quality over quantity
 6. Score the thinking, not the grammar`;
 
-  const buildCriteriaDetails = (criteria) => {
-    return criteria.map((c) => {
-      let detail = `- **${c.name}** (${c.weight}% weight): ${c.description}\n`;
-      if (c.poor) detail += `  POOR: ${c.poor}\n`;
-      if (c.champion) detail += `  CHAMPION: ${c.champion}`;
-      return detail;
+  const buildCriteriaDetails = (criteria) =>
+    criteria.map((c) => {
+      let d = `- **${c.name}** (${c.weight}% weight): ${c.description}\n`;
+      if (c.poor) d += `  POOR: ${c.poor}\n`;
+      if (c.champion) d += `  CHAMPION: ${c.champion}`;
+      return d;
     }).join("\n\n");
-  };
 
   const scoringPrompt = `## SCENARIO: ${scenario.client.name}
 Industry: ${scenario.client.industry} | Motion: ${scenario.motion.name}
@@ -199,14 +188,12 @@ Evaluate and respond in EXACT JSON (no other text before or after):
   "coachChallenge": "[Thought-provoking question tied to their gaps]"
 }`;
 
-  // Create the Anthropic client inside the handler (safer)
   const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
     maxRetries: 0,
   });
 
-  // Call Claude with a HARD timeout (Promise.race, not just SDK timeout)
-  console.log("[score] Calling Claude API...");
+  console.log("[score:app] Calling Claude...");
   let response;
   try {
     response = await withHardTimeout(
@@ -220,37 +207,27 @@ Evaluate and respond in EXACT JSON (no other text before or after):
       45_000,
       "Claude API call"
     );
-    console.log("[score] Claude responded, tokens:", response?.usage?.output_tokens);
+    console.log("[score:app] Claude responded");
   } catch (err) {
-    console.error("[score] Claude call failed:", err.message);
-    console.error("[score] Error status:", err.status, "type:", err.type);
+    console.error("[score:app] Claude failed:", err.message, "status:", err.status);
     return Response.json(
-      {
-        error: "Claude scoring failed",
-        detail: err.message,
-        status: err.status,
-        type: err.type,
-      },
+      { error: "Claude scoring failed", detail: err.message, status: err.status },
       { status: 502 }
     );
   }
 
-  // Parse Claude's JSON response
   const aiText = response?.content?.[0]?.text || "";
   let aiResult;
   try {
     const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found in response");
+    if (!jsonMatch) throw new Error("No JSON found");
     aiResult = JSON.parse(jsonMatch[0]);
   } catch (e) {
-    console.error("[score] Failed to parse AI JSON:", e.message);
-    console.error("[score] Response text:", aiText.slice(0, 300));
     return Response.json({ error: "Failed to parse AI response" }, { status: 500 });
   }
 
   aiResult.scores = validateAndAdjustScores(aiResult.scores);
 
-  // Compute weighted overall score
   let totalScore = 0;
   let totalWeight = 0;
   scenario.motion.scoringCriteria.forEach((c) => {
@@ -267,7 +244,7 @@ Evaluate and respond in EXACT JSON (no other text before or after):
   else if (overallScore >= 35) scoreInterpretation = "Foundation Phase";
   else scoreInterpretation = "Needs Development";
 
-  console.log("[score] Success — overall:", overallScore);
+  console.log("[score:app] Success — overall:", overallScore);
 
   return Response.json({
     score: {
