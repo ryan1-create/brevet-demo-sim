@@ -1,40 +1,24 @@
-// Brevet Sales Simulation — AI Scoring Endpoint (App Router)
-// Route: POST /api/score
+// Brevet Sales Simulation — AI Scoring Endpoint
+// Simple, direct, with hard timeout guarantee and aggressive logging.
 
 import Anthropic from "@anthropic-ai/sdk";
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-  timeout: 25_000, // 25s — fail fast instead of hanging
-  maxRetries: 1,
-});
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-function addJitter(baseDelay, jitterPercent = 0.3) {
-  const jitter = baseDelay * jitterPercent * (Math.random() - 0.5) * 2;
-  return Math.max(100, baseDelay + jitter);
+// Hard timeout wrapper — guarantees no hang, regardless of SDK behavior
+function withHardTimeout(promise, ms, label = "operation") {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} hard-timed-out after ${ms}ms`)),
+      ms
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-async function callWithRetry(fn, maxRetries = 3) {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      const isRateLimit = error.status === 429;
-      const isOverloaded = error.status === 529;
-      const isTimeout = error.code === "ETIMEDOUT";
-      if ((isRateLimit || isOverloaded || isTimeout) && attempt < maxRetries) {
-        const baseDelay = Math.min(Math.pow(2, attempt + 1) * 1000, 5000);
-        await new Promise((resolve) => setTimeout(resolve, addJitter(baseDelay)));
-      } else {
-        throw error;
-      }
-    }
-  }
-}
-
+// Quality gate for garbage submissions
 function assessSubmissionQuality(submission) {
   const fullText = (submission || "").trim();
   if (!fullText) return { quality: "empty", score: 5, skipAI: true };
@@ -49,7 +33,6 @@ function assessSubmissionQuality(submission) {
     contentLines.push(trimmed);
   }
   const teamContent = contentLines.join(" ");
-
   const words = teamContent.split(/\s+/).filter((w) => w.length > 0);
   const wordCount = words.length;
   const uniqueWords = new Set(words.map((w) => w.toLowerCase()));
@@ -67,7 +50,6 @@ function assessSubmissionQuality(submission) {
   if (garbageRatio >= 0.7 && wordCount <= 30) return { quality: "garbage", score: 10, skipAI: true };
   if (wordCount <= 8 && garbageRatio >= 0.5) return { quality: "garbage", score: 10, skipAI: true };
   if (uniqueWords.size <= 2 && wordCount >= 3) return { quality: "repetitive", score: 12, skipAI: true };
-  if (/^(lorem ipsum|placeholder|sample text)/i.test(teamContent)) return { quality: "garbage", score: 10, skipAI: true };
   if (teamContent.length < 15 && wordCount < 6) return { quality: "minimal", score: 15, skipAI: true };
 
   return { quality: "normal", skipAI: false };
@@ -76,15 +58,15 @@ function assessSubmissionQuality(submission) {
 function generateGarbageScore(criteria, qualityResult) {
   const baseScore = qualityResult.score;
   const criteriaScores = {};
-  criteria.forEach((c) => { criteriaScores[c.name] = baseScore; });
-
+  criteria.forEach((c) => {
+    criteriaScores[c.name] = baseScore;
+  });
   const feedbackByQuality = {
     empty: "There's no submission to coach on. Please walk through the framework and give me your team's real thinking.",
     garbage: "This doesn't read like a genuine attempt. Take another pass — think about what you'd actually say if you were sitting across from this CEO.",
     repetitive: "I can see this isn't a serious submission. Review the scenario, talk it through as a team, and send me something I can coach you on.",
     minimal: "There's not enough here for me to give you meaningful feedback. Dig into the scenario and build out your team's real strategic thinking.",
   };
-
   return {
     score: { overall: baseScore, criteria: criteriaScores, timestamp: new Date().toISOString() },
     coaching: {
@@ -93,8 +75,8 @@ function generateGarbageScore(criteria, qualityResult) {
       strengths: ["You engaged with the exercise — now let's see your best thinking."],
       improvements: [
         "Read the scenario carefully — the customer's stakeholders, timing, and stakes are all there.",
-        "Think like a trusted advisor, not a vendor. The CEO wants a business case, not a pitch.",
-        "Ground every recommendation in THIS customer's context, not in generic frameworks.",
+        "Think like a trusted advisor, not a vendor.",
+        "Ground every recommendation in THIS customer's context.",
       ],
       scoreInterpretation: "Needs Development",
     },
@@ -108,7 +90,6 @@ function validateAndAdjustScores(scores) {
   const min = Math.min(...values);
   const max = Math.max(...values);
   if (max - min >= 10) return scores;
-
   const adjusted = {};
   const sorted = Object.entries(scores).sort(([, a], [, b]) => a - b);
   const spreadPerStep = Math.max(4, Math.round(15 / (sorted.length - 1)));
@@ -120,235 +101,187 @@ function validateAndAdjustScores(scores) {
 }
 
 export async function POST(req) {
+  console.log("[score] POST received");
+
+  let body;
   try {
-    const { submission, scenario } = await req.json();
+    body = await req.json();
+  } catch (e) {
+    console.error("[score] Failed to parse request body:", e.message);
+    return Response.json({ error: "Invalid JSON" }, { status: 400 });
+  }
 
-    if (!submission || !scenario) {
-      return Response.json({ error: "Missing submission or scenario data" }, { status: 400 });
-    }
+  const { submission, scenario } = body;
+  console.log("[score] Client:", scenario?.client?.name, "submission length:", submission?.length);
 
-    const qualityResult = assessSubmissionQuality(submission);
-    if (qualityResult.skipAI) {
-      return Response.json(generateGarbageScore(scenario.motion.scoringCriteria, qualityResult));
-    }
+  if (!submission || !scenario) {
+    console.error("[score] Missing submission or scenario");
+    return Response.json({ error: "Missing submission or scenario data" }, { status: 400 });
+  }
 
-    const systemPrompt = `You are an elite sales coach at Brevet, a consulting firm that teaches Business Value Selling. You have 25+ years of experience training sellers to engage business buyers — not procurement, not champions below the decision line, but the actual executives who make budget decisions.
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error("[score] ANTHROPIC_API_KEY not set");
+    return Response.json({ error: "Server missing API key" }, { status: 500 });
+  }
 
-You are evaluating a team's response to a live sales simulation. Your role is to read their work like a real coach — form a genuine impression, give honest differentiated feedback, and ground everything in Brevet's methodology.
+  // Quality gate — garbage submissions get auto-scored without hitting Claude
+  const qualityResult = assessSubmissionQuality(submission);
+  if (qualityResult.skipAI) {
+    console.log("[score] Quality gate triggered:", qualityResult.quality);
+    return Response.json(generateGarbageScore(scenario.motion.scoringCriteria, qualityResult));
+  }
 
-## BREVET'S CORE METHODOLOGY
+  // Build the scoring prompt
+  const systemPrompt = `You are an elite sales coach at Brevet, a consulting firm that teaches Business Value Selling. You have 25+ years of experience training sellers to engage business buyers — not procurement, not champions below the decision line, but the actual executives who make budget decisions.
 
-Legacy Displacement is not about responding to an RFP. It is about creating the buying decision by making the cost of the status quo unavoidable. Great responses will:
-- Quantify or vividly articulate what the current approach is costing the business
-- Connect the proposed change to the customer's stated strategic priorities
-- Speak in the language of the boardroom — margin, risk, revenue, competitive position
-- Provide credible parallels from comparable companies
+Evaluate the team's response like a real coach — honest, direct, grounded in Brevet's methodology.
 
-Weak responses will:
-- Lead with product features
-- Treat the scenario as a procurement exercise
-- Miss the customer's specific context and stakeholders
-- Stay at the operational layer instead of the business layer
+## METHODOLOGY
+Legacy Displacement is about creating the buying decision by making the cost of the status quo unavoidable. Great responses quantify status-quo cost, connect to strategic priorities, speak executive language, and offer credible parallels. Weak responses lead with features, treat it as procurement, miss the customer context, or stay operational.
 
-## YOUR COACHING VOICE
-- Direct and honest — don't sugarcoat, but acknowledge good thinking when you see it
-- Sound like a real senior consultant, not an algorithm
-- Reference specific things the team wrote — never generic feedback
-- When something is weak, say WHY it's weak and what good would look like
-- When something is strong, call out exactly what made it strong
+## SCORING (use the full 10-100 range)
+- 90-100 Championship Caliber: specific customer references, business outcome framing, strategic clarity
+- 75-89 Strong Contender: customer-specific, connects to priorities, grounded recommendations
+- 55-74 Building Momentum: generic; could apply to any customer
+- 35-54 Foundation Phase: feature-centric, ignores context
+- 10-34 Not a genuine attempt
 
-## SCORING CALIBRATION — USE THE FULL RANGE
+## RULES
+1. Default to the middle when unsure
+2. Generic = 65 ceiling
+3. Each criterion scored independently
+4. At least 12 points of spread between highest and lowest
+5. Quality over quantity
+6. Score the thinking, not the grammar`;
 
-### 90-100: CHAMPIONSHIP CALIBER (rare — top 5%)
-Response would impress a CRO. Demonstrates ALL of:
-- Specific references to the customer's situation (names, roles, stakes, stated priorities from the scenario)
-- Business outcome framing throughout
-- Strategic clarity — reads like advice from a trusted board advisor
-- Clear actionable recommendations grounded in this customer's context
+  const buildCriteriaDetails = (criteria) => {
+    return criteria.map((c) => {
+      let detail = `- **${c.name}** (${c.weight}% weight): ${c.description}\n`;
+      if (c.poor) detail += `  POOR: ${c.poor}\n`;
+      if (c.champion) detail += `  CHAMPION: ${c.champion}`;
+      return detail;
+    }).join("\n\n");
+  };
 
-### 75-89: STRONG CONTENDER (top 25%)
-Solid strategic thinking with customer specificity. Understands the dynamics.
-- References this customer's actual situation
-- Connects to stated strategic priorities and timing
-- Provides grounded recommendations
-- May use directional language instead of exact figures — that's fine
+  const scoringPrompt = `## SCENARIO: ${scenario.client.name}
+Industry: ${scenario.client.industry} | Motion: ${scenario.motion.name}
+Size: ${scenario.client.size} | Revenue: ${scenario.client.revenue}
+Current: ${scenario.client.currentSolution}
 
-### 55-74: BUILDING MOMENTUM (where most responses land)
-Directionally correct but generic. Hallmark: could be copy-pasted to a different customer.
-- Right general ideas but no customer-specific detail
-- Buzzwords without grounding
-- Vague recommendations
+Situation: ${scenario.subtitle}
 
-### 35-54: FOUNDATION PHASE (below average)
-Misses the point or stays surface-level.
-
-### 10-34: NEEDS DEVELOPMENT
-Not a genuine attempt.
-
-## CRITICAL RULES
-
-1. Default to the middle. When unsure, go lower. Teams must earn their way above 70.
-2. Generic = 65 ceiling. If the response could apply to any customer, cap that criterion at 65.
-3. Each criterion is independent.
-4. Variance is required — at least 12 points of spread between highest and lowest criterion.
-5. Quality over quantity.
-6. Read between the lines. Score the thinking, not the grammar.
-7. Directional language is OK — don't penalize lack of external data the team couldn't look up.`;
-
-    const buildCriteriaDetails = (criteria) => {
-      return criteria.map((c) => {
-        let detail = `- **${c.name}** (${c.weight}% weight)\n  What this measures: ${c.description}\n`;
-        if (c.poor) detail += `  POOR (35-50): ${c.poor}\n`;
-        if (c.champion) detail += `  CHAMPION (85-100): ${c.champion}`;
-        return detail;
-      }).join("\n\n");
-    };
-
-    const buildPenaltiesSection = (penalties) => {
-      if (!penalties || penalties.length === 0) return "";
-      return `\n### SCORING PENALTIES (3-point reduction each, max 2 per round)\n${penalties.map((p) => `- ${p}`).join("\n")}\n`;
-    };
-
-    const scoringPrompt = `## SCENARIO: ${scenario.client.name}
-**Industry:** ${scenario.client.industry} | **Motion:** ${scenario.motion.name}
-**Size:** ${scenario.client.size} | **Revenue:** ${scenario.client.revenue}
-**Current Solution:** ${scenario.client.currentSolution}
-
-### Situation
-${scenario.subtitle}
-
-### Context
+Context:
 ${scenario.context.map((c) => `- ${c}`).join("\n")}
 
-### Stakeholders
-${scenario.personas.map((p) =>
-  `- ${p.role} — ${p.name}: ${p.tagline}\n  Fears: ${p.fears}\n  Wants: ${p.wants}\n  Levers: ${p.levers}`
-).join("\n")}
+Stakeholders:
+${scenario.personas.map((p) => `- ${p.role} — ${p.name}: ${p.tagline} | Fears: ${p.fears} | Wants: ${p.wants} | Levers: ${p.levers}`).join("\n")}
 
-### Mission
-${scenario.mission}
+Mission: ${scenario.mission}
 
-### SCORING RUBRIC
+## RUBRIC
 ${buildCriteriaDetails(scenario.motion.scoringCriteria)}
-${buildPenaltiesSection(scenario.motion.penalties)}
 
 ---
 
 ## TEAM'S SUBMISSION
-
 ${submission}
 
 ---
 
-## YOUR EVALUATION TASK
-
-Read the submission carefully. Then:
-
-1. First impression: Is this a genuine attempt?
-2. For each criterion: Compare against Poor and Champion benchmarks.
-3. Check for penalties — apply 3-point reduction each, max 2.
-4. Differentiation required — at least 12 points of spread.
-5. Write feedback like a real coach — reference specific things they said.
-
-Respond in EXACT JSON (no other text):
+Evaluate and respond in EXACT JSON (no other text before or after):
 {
   "scores": {
-    ${scenario.motion.scoringCriteria.map((c) => `"${c.name}": [score 10-100]`).join(",\n    ")}
+    ${scenario.motion.scoringCriteria.map((c) => `"${c.name}": [10-100]`).join(",\n    ")}
   },
-  "penaltiesApplied": ["[List triggered, or empty array]"],
-  "overallAssessment": "[2-3 sentences referencing specifics they wrote]",
+  "overallAssessment": "[2-3 sentences referencing what they wrote]",
   "strengths": ["[Specific strength 1]", "[Specific strength 2]"],
   "improvements": ["[Specific improvement 1]", "[Another]", "[Third]"],
-  "coachChallenge": "[Thought-provoking question tied to their specific gaps]"
+  "coachChallenge": "[Thought-provoking question tied to their gaps]"
 }`;
 
-    console.log("Scoring request received for client:", scenario.client?.name);
+  // Create the Anthropic client inside the handler (safer)
+  const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    maxRetries: 0,
+  });
 
-    let response;
-    try {
-      response = await anthropic.messages.create({
-        model: "claude-sonnet-4-5-20250929",
-        max_tokens: 2500,
+  // Call Claude with a HARD timeout (Promise.race, not just SDK timeout)
+  console.log("[score] Calling Claude API...");
+  let response;
+  try {
+    response = await withHardTimeout(
+      anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
         temperature: 0.3,
         messages: [{ role: "user", content: scoringPrompt }],
         system: systemPrompt,
-      });
-    } catch (apiError) {
-      console.error("Anthropic API error:", apiError?.message || apiError);
-      console.error("Error status:", apiError?.status);
-      console.error("Error type:", apiError?.type);
-      return Response.json(
-        {
-          error: "Claude scoring failed",
-          detail: apiError?.message || "Unknown error",
-          status: apiError?.status,
-        },
-        { status: 500 }
-      );
-    }
-
-    console.log("Claude response received, length:", response?.content?.[0]?.text?.length);
-    const aiText = response.content[0].text;
-    let aiResult;
-    try {
-      const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON found");
-      aiResult = JSON.parse(jsonMatch[0]);
-    } catch (parseError) {
-      return Response.json({ error: "Failed to parse AI response" }, { status: 500 });
-    }
-
-    aiResult.scores = validateAndAdjustScores(aiResult.scores);
-
-    let totalScore = 0;
-    let totalWeight = 0;
-    scenario.motion.scoringCriteria.forEach((criterion) => {
-      const score = aiResult.scores[criterion.name] || 40;
-      totalScore += score * criterion.weight;
-      totalWeight += criterion.weight;
-    });
-    let overallScore = Math.round(totalScore / totalWeight);
-
-    const penaltiesApplied = (aiResult.penaltiesApplied || []).filter(
-      (p) => p && p !== "None" && !p.startsWith("[")
+      }),
+      45_000,
+      "Claude API call"
     );
-    const cappedPenalties = penaltiesApplied.slice(0, 2);
-    if (cappedPenalties.length > 0) {
-      overallScore = Math.max(10, overallScore - cappedPenalties.length * 3);
-    }
-
-    let scoreInterpretation;
-    if (overallScore >= 90) scoreInterpretation = "Championship Caliber";
-    else if (overallScore >= 75) scoreInterpretation = "Strong Contender";
-    else if (overallScore >= 55) scoreInterpretation = "Building Momentum";
-    else if (overallScore >= 35) scoreInterpretation = "Foundation Phase";
-    else scoreInterpretation = "Needs Development";
-
-    return Response.json({
-      score: {
-        overall: overallScore,
-        criteria: aiResult.scores,
-        timestamp: new Date().toISOString(),
-      },
-      coaching: {
-        tone:
-          overallScore >= 90 ? "excellent" :
-          overallScore >= 75 ? "good" :
-          overallScore >= 55 ? "developing" :
-          "needs_work",
-        mainFeedback: aiResult.overallAssessment,
-        strengths: aiResult.strengths,
-        improvements: aiResult.improvements,
-        coachChallenge: aiResult.coachChallenge,
-        scoreInterpretation,
-        penaltiesApplied: cappedPenalties.length > 0 ? cappedPenalties : undefined,
-      },
-    });
-  } catch (error) {
-    console.error("Scoring error:", error);
+    console.log("[score] Claude responded, tokens:", response?.usage?.output_tokens);
+  } catch (err) {
+    console.error("[score] Claude call failed:", err.message);
+    console.error("[score] Error status:", err.status, "type:", err.type);
     return Response.json(
-      { error: "Failed to process submission. Please try again.", retryable: true },
-      { status: 500 }
+      {
+        error: "Claude scoring failed",
+        detail: err.message,
+        status: err.status,
+        type: err.type,
+      },
+      { status: 502 }
     );
   }
+
+  // Parse Claude's JSON response
+  const aiText = response?.content?.[0]?.text || "";
+  let aiResult;
+  try {
+    const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON found in response");
+    aiResult = JSON.parse(jsonMatch[0]);
+  } catch (e) {
+    console.error("[score] Failed to parse AI JSON:", e.message);
+    console.error("[score] Response text:", aiText.slice(0, 300));
+    return Response.json({ error: "Failed to parse AI response" }, { status: 500 });
+  }
+
+  aiResult.scores = validateAndAdjustScores(aiResult.scores);
+
+  // Compute weighted overall score
+  let totalScore = 0;
+  let totalWeight = 0;
+  scenario.motion.scoringCriteria.forEach((c) => {
+    const s = aiResult.scores[c.name] || 40;
+    totalScore += s * c.weight;
+    totalWeight += c.weight;
+  });
+  const overallScore = Math.round(totalScore / totalWeight);
+
+  let scoreInterpretation;
+  if (overallScore >= 90) scoreInterpretation = "Championship Caliber";
+  else if (overallScore >= 75) scoreInterpretation = "Strong Contender";
+  else if (overallScore >= 55) scoreInterpretation = "Building Momentum";
+  else if (overallScore >= 35) scoreInterpretation = "Foundation Phase";
+  else scoreInterpretation = "Needs Development";
+
+  console.log("[score] Success — overall:", overallScore);
+
+  return Response.json({
+    score: {
+      overall: overallScore,
+      criteria: aiResult.scores,
+      timestamp: new Date().toISOString(),
+    },
+    coaching: {
+      tone: overallScore >= 75 ? "good" : overallScore >= 55 ? "developing" : "needs_work",
+      mainFeedback: aiResult.overallAssessment,
+      strengths: aiResult.strengths,
+      improvements: aiResult.improvements,
+      coachChallenge: aiResult.coachChallenge,
+      scoreInterpretation,
+    },
+  });
 }
