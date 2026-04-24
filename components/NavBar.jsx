@@ -180,7 +180,9 @@ export default function NavBar({
           border-bottom: 1px solid var(--border);
           display: flex;
           align-items: center;
-          position: relative;
+          position: sticky;
+          top: 0;
+          z-index: 100;
           animation: navFade 400ms var(--ease-entry) 200ms both;
         }
         @keyframes navFade {
@@ -305,7 +307,7 @@ export default function NavBar({
           border-radius: 12px;
           padding: 8px;
           box-shadow: 0 12px 32px rgba(15, 27, 34, 0.12), 0 4px 12px rgba(15, 27, 34, 0.06);
-          z-index: 30;
+          z-index: 200;
           animation: menuIn 180ms var(--ease-state);
         }
         @keyframes menuIn {

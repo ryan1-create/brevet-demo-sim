@@ -954,8 +954,8 @@ export default function ChallengeCanvas({ scenario, teamName, currentRound, scor
           margin-top: 16px;
           background: var(--canvas);
           position: sticky;
-          top: 0;
-          z-index: 10;
+          top: 72px;
+          z-index: 50;
         }
         .strip-left {
           display: flex;
