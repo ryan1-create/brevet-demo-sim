@@ -441,7 +441,7 @@ export default function NavBar({
           position: fixed;
           inset: 0;
           background: rgba(15, 27, 34, 0.3);
-          z-index: 40;
+          z-index: 250;
           animation: fadeIn 280ms var(--ease-state);
         }
         @keyframes fadeIn {
@@ -459,7 +459,7 @@ export default function NavBar({
           border-left: 1px solid var(--border);
           display: flex;
           flex-direction: column;
-          z-index: 50;
+          z-index: 260;
           animation: slideIn 280ms var(--ease-state);
         }
         @keyframes slideIn {

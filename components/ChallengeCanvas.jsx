@@ -86,12 +86,15 @@ function ThreeColLayout({ cards, responses, setResponse, focused, setFocused, do
   const topCards = cards.slice(0, 3);
   const bottomCard = cards[3];
 
-  const FrameCard = ({ card, idx, fullWidth }) => {
+  const renderCard = (card, idx, fullWidth = false) => {
     const value = responses[`card_${idx}`] || "";
     const wordCount = value.trim().split(/\s+/).filter(Boolean).length;
     const isFocused = focused === `card_${idx}`;
     return (
-      <div className={`card ${isFocused ? "focused" : ""} ${fullWidth ? "full" : ""}`}>
+      <div
+        key={card.number}
+        className={`card ${isFocused ? "focused" : ""} ${fullWidth ? "full" : ""}`}
+      >
         <div className="card-header">
           <div className="card-label">
             <span className="dot" style={{ background: dotColor }} />
@@ -116,9 +119,9 @@ function ThreeColLayout({ cards, responses, setResponse, focused, setFocused, do
   return (
     <div className="three-col">
       <div className="top-row">
-        {topCards.map((card, i) => <FrameCard key={card.number} card={card} idx={i} />)}
+        {topCards.map((card, i) => renderCard(card, i, false))}
       </div>
-      {bottomCard && <FrameCard card={bottomCard} idx={3} fullWidth />}
+      {bottomCard && renderCard(bottomCard, 3, true)}
       <style jsx>{`
         .three-col {
           padding: 24px 32px;
@@ -1120,7 +1123,7 @@ export default function ChallengeCanvas({ scenario, teamName, currentRound, scor
         .brief-scrim {
           position: fixed; inset: 0;
           background: rgba(15, 27, 34, 0.3);
-          z-index: 40;
+          z-index: 250;
           animation: scrimIn 280ms;
         }
         @keyframes scrimIn { from { opacity: 0; } to { opacity: 1; } }
@@ -1134,7 +1137,7 @@ export default function ChallengeCanvas({ scenario, teamName, currentRound, scor
           border-left: 1px solid var(--border);
           display: flex;
           flex-direction: column;
-          z-index: 50;
+          z-index: 260;
           animation: drawerIn 280ms;
         }
         @keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
