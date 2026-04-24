@@ -340,7 +340,10 @@ export default function ScenarioBrief({ scenario, teamName, currentRound, score,
               <div className="sb-framework-grid">
                 {scenario.motion.frameworkCards.map((card) => (
                   <div key={card.number} className="sb-chip">
-                    <span className="sb-chip-dot" />
+                    <span
+                      className="sb-chip-dot"
+                      style={{ background: scenario.motion.roundColor }}
+                    />
                     <span className="sb-chip-num">{card.number}</span>
                     <span>· {card.name}</span>
                   </div>

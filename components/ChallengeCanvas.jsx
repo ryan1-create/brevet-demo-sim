@@ -3,14 +3,14 @@
 import { useState, useEffect } from "react";
 import NavBar from "./NavBar";
 
-function FrameworkCard({ card, value, onChange, focused, onFocus, onBlur, fullWidth = false }) {
+function FrameworkCard({ card, value, onChange, focused, onFocus, onBlur, fullWidth = false, dotColor }) {
   const wordCount = value.trim().split(/\s+/).filter(Boolean).length;
 
   return (
     <div className={`card ${focused ? "focused" : ""} ${value ? "filled" : ""} ${fullWidth ? "full" : ""}`}>
       <div className="card-header">
         <div className="card-label">
-          <span className="dot" />
+          <span className="dot" style={dotColor ? { background: dotColor } : undefined} />
           <span>{card.number} · {card.name}</span>
         </div>
         <div className="word-count">{wordCount} WORDS</div>
@@ -308,6 +308,7 @@ export default function ChallengeCanvas({ scenario, teamName, currentRound, scor
               focused={focusedIndex === i}
               onFocus={() => setFocusedIndex(i)}
               onBlur={() => setFocusedIndex(null)}
+              dotColor={scenario?.motion?.roundColor}
             />
           ))}
         </div>
@@ -325,6 +326,7 @@ export default function ChallengeCanvas({ scenario, teamName, currentRound, scor
               onFocus={() => setFocusedIndex(3)}
               onBlur={() => setFocusedIndex(null)}
               fullWidth
+              dotColor={scenario?.motion?.roundColor}
             />
           </div>
         )}

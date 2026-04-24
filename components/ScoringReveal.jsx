@@ -30,7 +30,14 @@ const EVALUATION_PHASES = [
   "Preparing coach feedback",
 ];
 
-export default function ScoringReveal({ scenario, submission, onContinue, onRestart }) {
+export default function ScoringReveal({
+  scenario,
+  submission,
+  onContinue,
+  onRestart,
+  currentRound = 1,
+  isLastRound = false,
+}) {
   const [phase, setPhase] = useState("evaluating"); // "evaluating" | "revealed" | "error"
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -99,7 +106,14 @@ export default function ScoringReveal({ scenario, submission, onContinue, onRest
       )}
 
       {phase === "revealed" && result && (
-        <Revealed result={result} scenario={scenario} onContinue={onContinue} onRestart={onRestart} />
+        <Revealed
+          result={result}
+          scenario={scenario}
+          onContinue={() => onContinue(result.score?.overall || 0)}
+          onRestart={onRestart}
+          currentRound={currentRound}
+          isLastRound={isLastRound}
+        />
       )}
 
       <style jsx>{`
@@ -212,7 +226,7 @@ export default function ScoringReveal({ scenario, submission, onContinue, onRest
   );
 }
 
-function Revealed({ result, scenario, onContinue, onRestart }) {
+function Revealed({ result, scenario, onContinue, onRestart, currentRound, isLastRound }) {
   const { score, coaching } = result;
   const [rubricVisible, setRubricVisible] = useState(false);
   const [feedbackVisible, setFeedbackVisible] = useState(false);
@@ -296,10 +310,10 @@ function Revealed({ result, scenario, onContinue, onRestart }) {
 
           <div className="actions">
             <button className="ghost-btn" onClick={onRestart}>
-              Try a Different Scenario
+              Start Over
             </button>
             <button className="primary-btn" onClick={onContinue}>
-              Continue →
+              {isLastRound ? "View Final Score →" : `Continue to Round ${currentRound + 1} →`}
             </button>
           </div>
         </div>
