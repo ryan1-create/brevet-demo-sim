@@ -217,7 +217,7 @@ function PersonaCard({ role, name, tagline, fears, wants, levers }) {
   );
 }
 
-export default function ScenarioBrief({ scenario, teamName, currentRound, score, onBegin }) {
+export default function ScenarioBrief({ scenario, teamName, currentRound, score, onBegin, onRoundChange }) {
   const shaderRef = useRef(null);
 
   useEffect(() => {
@@ -276,7 +276,7 @@ export default function ScenarioBrief({ scenario, teamName, currentRound, score,
 
   return (
     <div className="sb-outer">
-      <NavBar currentRound={currentRound} teamName={teamName} score={score} />
+      <NavBar currentRound={currentRound} teamName={teamName} score={score} onRoundChange={onRoundChange} />
 
       <div className="sb-page">
         {/* Hero zone */}

@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { INDUSTRIES } from "@/lib/scenarios";
+import { INDUSTRIES, MOTIONS } from "@/lib/scenarios";
+
+// Ordered motions with shortened descriptions for the welcome preview
+const MOTION_PREVIEW = [
+  { ...MOTIONS.legacyDisplacement, short: "Create the buying decision before the customer knows they need to act." },
+  { ...MOTIONS.replacement, short: "Win when the customer is evaluating alternatives." },
+  { ...MOTIONS.defense, short: "Protect and renew an at-risk account." },
+  { ...MOTIONS.expansion, short: "Grow the footprint inside a success story." },
+];
 
 const INDUSTRY_ICONS = {
   technology: (
@@ -109,17 +117,31 @@ export default function Welcome({ onStart }) {
       <section className="hero">
         <img
           className="mark-lg"
-          src="/brevet-chevron.png"
+          src="/brevet-chevron.svg"
           alt="Brevet"
-          height="64"
+          height="72"
         />
         <h1 className="hero-title">
           <span className="line1">The Brevet Group</span>
           <span className="line2">Sales Simulation</span>
         </h1>
-        <p className="tagline">
-          Four motions of modern selling. One hour to prove you&apos;ve mastered them.
-        </p>
+      </section>
+
+      <section className="motions">
+        <div className="label motions-label">THE FOUR MOTIONS</div>
+        <div className="motions-grid">
+          {MOTION_PREVIEW.map((m) => (
+            <div
+              key={m.id}
+              className="motion-card"
+              style={{ borderLeftColor: m.roundColor }}
+            >
+              <div className="motion-number">ROUND {m.number}</div>
+              <div className="motion-name">{m.name}</div>
+              <div className="motion-desc">{m.short}</div>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="setup">
@@ -161,7 +183,6 @@ export default function Welcome({ onStart }) {
         >
           BEGIN SIMULATION →
         </button>
-        <div className="cta-note">Takes about 60 minutes · 4 rounds · AI-coached</div>
       </section>
 
       <style jsx>{`
@@ -242,12 +263,67 @@ export default function Welcome({ onStart }) {
           letter-spacing: -0.02em;
           color: var(--ink);
         }
-        .tagline {
-          margin-top: 24px;
-          font-size: 20px;
+
+        .motions {
+          position: relative;
+          z-index: 2;
+          padding: 0 80px 32px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          animation: fadeUp 600ms var(--ease-entry, cubic-bezier(0.22, 1, 0.36, 1)) 80ms both;
+        }
+        .motions-label {
+          margin-bottom: 24px;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--ink-3);
+        }
+        .motions-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 16px;
+          width: 100%;
+          max-width: 1100px;
+        }
+        .motion-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-left-width: 3px;
+          border-left-style: solid;
+          border-radius: 12px;
+          padding: 18px 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          transition: background 200ms var(--ease-state), border-color 200ms var(--ease-state);
+        }
+        .motion-card:hover {
+          background: var(--surface-hover);
+          border-color: var(--border-strong);
+        }
+        .motion-number {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          font-weight: 500;
+          letter-spacing: 0.08em;
+          color: var(--ink-3);
+        }
+        .motion-name {
+          font-family: 'Inter Tight', sans-serif;
+          font-weight: 700;
+          font-size: 18px;
+          letter-spacing: -0.01em;
+          color: var(--ink);
+          line-height: 1.15;
+        }
+        .motion-desc {
+          font-size: 13px;
           color: var(--ink-2);
-          line-height: 1.45;
-          max-width: 620px;
+          line-height: 1.4;
+          margin-top: 4px;
         }
 
         .setup {

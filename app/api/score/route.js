@@ -106,23 +106,53 @@ export async function POST(req) {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { submission, scenario } = body;
-  console.log("[score:app] Client:", scenario?.client?.name);
+  const { submission, scenario, phase = "initial", wobbleResponse } = body;
+  const isWobble = phase === "wobble";
+  const textToScore = isWobble ? wobbleResponse : submission;
+  console.log("[score:app] Client:", scenario?.client?.name, "phase:", phase);
 
   if (!submission || !scenario) {
     return Response.json({ error: "Missing submission or scenario" }, { status: 400 });
   }
-
+  if (isWobble && !wobbleResponse) {
+    return Response.json({ error: "Missing wobble response" }, { status: 400 });
+  }
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: "Server missing API key" }, { status: 500 });
   }
 
-  const qualityResult = assessSubmissionQuality(submission);
+  const activeCriteria = isWobble
+    ? scenario.motion.wobble?.scoringCriteria || []
+    : scenario.motion.scoringCriteria;
+
+  const qualityResult = assessSubmissionQuality(textToScore);
   if (qualityResult.skipAI) {
-    return Response.json(generateGarbageScore(scenario.motion.scoringCriteria, qualityResult));
+    return Response.json(generateGarbageScore(activeCriteria, qualityResult));
   }
 
-  const systemPrompt = `You are an elite sales coach at Brevet, a consulting firm that teaches Business Value Selling. You have 25+ years of experience training sellers to engage business buyers — not procurement, not champions below the decision line, but the actual executives who make budget decisions.
+  const systemPrompt = isWobble
+    ? `You are an elite sales coach at Brevet, evaluating how a seller ADAPTS when the deal wobbles.
+
+The seller has already submitted their initial strategy. Now a curveball has dropped — new intel, a competitive move, a political shift. You are scoring their RE-READ and RESPONSE to the new dynamic.
+
+## WHAT YOU'RE LOOKING FOR
+- Did they ENGAGE with the new information, or just repeat their initial thinking?
+- Do they show sophisticated political / competitive reading?
+- Do they move toward a CONCRETE next action, not just more analysis?
+- Do they stay composed — the best sellers adapt, they don't panic?
+
+## SCORING (use the full 10-100 range)
+- 90-100: Championship adaptation — engages the curveball with composed, specific, executive-grade response
+- 75-89: Strong adaptation — acknowledges new reality, offers grounded moves
+- 55-74: Building Momentum — directionally correct but generic
+- 35-54: Foundation Phase — ignores or misreads the new intel
+- 10-34: Not a genuine attempt
+
+## RULES
+1. If the response ignores the curveball, cap at 55
+2. At least 12 points of spread between highest and lowest
+3. Score the thinking, not the grammar`
+    : `You are an elite sales coach at Brevet, a consulting firm that teaches Business Value Selling. You have 25+ years of experience training sellers to engage business buyers — not procurement, not champions below the decision line, but the actual executives who make budget decisions.
 
 Evaluate the team's response like a real coach — honest, direct, grounded in Brevet's methodology.
 
@@ -152,7 +182,7 @@ Legacy Displacement is about creating the buying decision by making the cost of 
       return d;
     }).join("\n\n");
 
-  const scoringPrompt = `## SCENARIO: ${scenario.client.name}
+  const scenarioContext = `## SCENARIO: ${scenario.client.name}
 Industry: ${scenario.client.industry} | Motion: ${scenario.motion.name}
 Size: ${scenario.client.size} | Revenue: ${scenario.client.revenue}
 Current: ${scenario.client.currentSolution}
@@ -165,10 +195,53 @@ ${scenario.context.map((c) => `- ${c}`).join("\n")}
 Stakeholders:
 ${scenario.personas.map((p) => `- ${p.role} — ${p.name}: ${p.tagline} | Fears: ${p.fears} | Wants: ${p.wants} | Levers: ${p.levers}`).join("\n")}
 
-Mission: ${scenario.mission}
+Mission: ${scenario.mission}`;
+
+  const scoringPrompt = isWobble
+    ? `${scenarioContext}
+
+---
+
+## TEAM'S INITIAL STRATEGY (context)
+${submission}
+
+---
+
+## WOBBLE — CURVEBALL DROPPED
+**${scenario.motion.wobble.title}**
+
+${scenario.motion.wobble.description}
+
+**Question posed:** ${scenario.motion.wobble.question}
+
+---
+
+## TEAM'S WOBBLE RESPONSE
+${wobbleResponse}
+
+---
+
+## WOBBLE RUBRIC
+${buildCriteriaDetails(activeCriteria)}
+
+---
+
+Evaluate the team's WOBBLE RESPONSE ONLY. Focus on how well they adapted to the curveball.
+
+Respond in EXACT JSON (no other text before or after):
+{
+  "scores": {
+    ${activeCriteria.map((c) => `"${c.name}": [10-100]`).join(",\n    ")}
+  },
+  "overallAssessment": "[2-3 sentences on how well they adapted, referencing what they wrote]",
+  "strengths": ["[Specific strength 1]", "[Specific strength 2]"],
+  "improvements": ["[Specific improvement 1]", "[Another]"],
+  "coachChallenge": "[Thought-provoking question about pressure moments]"
+}`
+    : `${scenarioContext}
 
 ## RUBRIC
-${buildCriteriaDetails(scenario.motion.scoringCriteria)}
+${buildCriteriaDetails(activeCriteria)}
 
 ---
 
@@ -180,7 +253,7 @@ ${submission}
 Evaluate and respond in EXACT JSON (no other text before or after):
 {
   "scores": {
-    ${scenario.motion.scoringCriteria.map((c) => `"${c.name}": [10-100]`).join(",\n    ")}
+    ${activeCriteria.map((c) => `"${c.name}": [10-100]`).join(",\n    ")}
   },
   "overallAssessment": "[2-3 sentences referencing what they wrote]",
   "strengths": ["[Specific strength 1]", "[Specific strength 2]"],
@@ -230,7 +303,7 @@ Evaluate and respond in EXACT JSON (no other text before or after):
 
   let totalScore = 0;
   let totalWeight = 0;
-  scenario.motion.scoringCriteria.forEach((c) => {
+  activeCriteria.forEach((c) => {
     const s = aiResult.scores[c.name] || 40;
     totalScore += s * c.weight;
     totalWeight += c.weight;

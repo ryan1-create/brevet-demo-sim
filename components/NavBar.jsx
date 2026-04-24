@@ -2,16 +2,40 @@
 
 import { useState } from "react";
 import { getMockLeaderboard } from "@/lib/mockLeaderboard";
+import { MOTIONS, MOTION_ORDER } from "@/lib/scenarios";
 
-export default function NavBar({ currentRound = 1, teamName = "Vanguard Partners", score = 287 }) {
+const ROUND_LABELS = MOTION_ORDER.map((id) => {
+  const m = Object.values(MOTIONS).find((x) => x.id === id);
+  return m ? m.name : "";
+});
+
+export default function NavBar({
+  currentRound = 1,
+  teamName = "Vanguard Partners",
+  score = 287,
+  onRoundChange,
+}) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const leaderboard = getMockLeaderboard(teamName, score);
   const myRank = leaderboard.find((r) => r.isYou)?.rank || 3;
 
   const renderDot = (i) => {
-    if (i < currentRound - 1) return <div key={i} className="dot completed" />;
-    if (i === currentRound - 1) return <div key={i} className="dot current" />;
-    return <div key={i} className="dot upcoming" />;
+    const roundNumber = i + 1;
+    const label = `Round ${String(roundNumber).padStart(2, "0")} · ${ROUND_LABELS[i]}`;
+    const state =
+      i < currentRound - 1 ? "completed" : i === currentRound - 1 ? "current" : "upcoming";
+    return (
+      <button
+        key={i}
+        className={`dot-btn ${state}`}
+        title={label}
+        aria-label={label}
+        onClick={() => onRoundChange && onRoundChange(roundNumber)}
+        type="button"
+      >
+        <span className={`dot ${state}`} />
+      </button>
+    );
   };
 
   return (
@@ -21,9 +45,9 @@ export default function NavBar({ currentRound = 1, teamName = "Vanguard Partners
           <div className="brand">
             <img
               className="brand-mark"
-              src="/brevet-chevron.png"
+              src="/brevet-chevron.svg"
               alt="Brevet"
-              height="24"
+              height="28"
             />
           </div>
           <div className="v-divider" />
@@ -179,13 +203,33 @@ export default function NavBar({ currentRound = 1, teamName = "Vanguard Partners
         .dots {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 4px;
+        }
+        .dot-btn {
+          background: none;
+          border: none;
+          padding: 8px;
+          margin: -8px 0;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          transition: background 150ms var(--ease-state);
+        }
+        .dot-btn:hover {
+          background: rgba(15, 27, 34, 0.06);
+        }
+        .dot-btn:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 1px;
         }
         .dot {
           width: 8px;
           height: 8px;
           border-radius: 999px;
           box-sizing: border-box;
+          transition: background 150ms var(--ease-state), border-color 150ms var(--ease-state);
         }
         .dot.completed {
           background: var(--ink);
@@ -199,6 +243,9 @@ export default function NavBar({ currentRound = 1, teamName = "Vanguard Partners
         .dot.upcoming {
           background: transparent;
           border: 1px solid var(--border-strong);
+        }
+        .dot-btn:hover .dot.upcoming {
+          border-color: var(--ink-2);
         }
         @keyframes dotPulse {
           0%, 100% { transform: scale(1); }

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import BrevetLoader from "./BrevetLoader";
 
-// Count-up for the overall score
 function ScoreCountUp({ target, duration = 1500 }) {
   const [value, setValue] = useState(0);
   useEffect(() => {
@@ -21,145 +21,43 @@ function ScoreCountUp({ target, duration = 1500 }) {
   return <>{value}</>;
 }
 
-const EVALUATION_PHASES = [
+const EVAL_PHASES_INITIAL = [
   "Reading your submission",
-  "Scoring value gaps",
-  "Scoring art of the possible",
-  "Scoring impact",
-  "Scoring customer story",
+  "Applying the rubric",
+  "Weighing the evidence",
   "Preparing coach feedback",
 ];
 
-export default function ScoringReveal({
-  scenario,
-  submission,
-  onContinue,
-  onRestart,
-  currentRound = 1,
-  isLastRound = false,
-}) {
-  const [phase, setPhase] = useState("evaluating"); // "evaluating" | "revealed" | "error"
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
-  const [evalPhaseIndex, setEvalPhaseIndex] = useState(0);
+const EVAL_PHASES_WOBBLE = [
+  "Reading your adaptation",
+  "Testing against the curveball",
+  "Scoring the re-read",
+  "Preparing coach feedback",
+];
 
-  // Cycle evaluation phase labels
+function EvaluatingScreen({ phases }) {
+  const [idx, setIdx] = useState(0);
   useEffect(() => {
-    if (phase !== "evaluating") return;
     const interval = setInterval(() => {
-      setEvalPhaseIndex((i) => (i + 1) % EVALUATION_PHASES.length);
+      setIdx((i) => (i + 1) % phases.length);
     }, 1500);
     return () => clearInterval(interval);
-  }, [phase]);
-
-  // Call the scoring API
-  useEffect(() => {
-    if (phase !== "evaluating") return;
-    let cancelled = false;
-
-    async function score() {
-      try {
-        const res = await fetch("/api/score", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ submission, scenario }),
-        });
-        if (!res.ok) throw new Error(`Scoring failed: ${res.status}`);
-        const data = await res.json();
-        if (cancelled) return;
-        setResult(data);
-        setPhase("revealed");
-      } catch (err) {
-        if (cancelled) return;
-        setError(err.message || "Something went wrong.");
-        setPhase("error");
-      }
-    }
-    score();
-    return () => {
-      cancelled = true;
-    };
-  }, [phase, scenario, submission]);
+  }, [phases]);
 
   return (
-    <div className="page dark">
-      {phase === "evaluating" && (
-        <div className="evaluating">
-          <div className="loader-wrap">
-            <div className="loader" />
-          </div>
-          <div className="eval-phase">
-            {EVALUATION_PHASES[evalPhaseIndex]}
-            <span className="dots">…</span>
-          </div>
-        </div>
-      )}
-
-      {phase === "error" && (
-        <div className="error">
-          <div className="error-heading">Something went wrong.</div>
-          <div className="error-body">{error}</div>
-          <button className="retry-btn" onClick={() => setPhase("evaluating")}>
-            Try Again
-          </button>
-        </div>
-      )}
-
-      {phase === "revealed" && result && (
-        <Revealed
-          result={result}
-          scenario={scenario}
-          onContinue={() => onContinue(result.score?.overall || 0)}
-          onRestart={onRestart}
-          currentRound={currentRound}
-          isLastRound={isLastRound}
-        />
-      )}
-
+    <div className="evaluating">
+      <BrevetLoader width={240} />
+      <div className="eval-phase">
+        {phases[idx]}
+        <span className="dots">…</span>
+      </div>
       <style jsx>{`
-        .page {
-          --canvas: #1A2C36;
-          --canvas-deep: #13222B;
-          --surface: rgba(255,255,255,0.05);
-          --surface-2: rgba(255,255,255,0.08);
-          --ink: #F4F1EC;
-          --ink-2: rgba(244,241,236,0.72);
-          --ink-3: rgba(244,241,236,0.48);
-          --border: rgba(255,255,255,0.12);
-          --accent: #E85D2E;
-          --accent-deep: #FF7A4E;
-
-          min-height: 100vh;
-          width: 100%;
-          background: var(--canvas);
-          color: var(--ink);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 48px 32px;
-        }
-
-        /* ============ Evaluating ============ */
         .evaluating {
           text-align: center;
           display: flex;
           flex-direction: column;
           align-items: center;
           gap: 48px;
-        }
-        .loader-wrap {
-          width: 80px;
-          height: 80px;
-          position: relative;
-        }
-        .loader {
-          width: 80px;
-          height: 80px;
-          border-radius: 50%;
-          border: 2px solid rgba(255, 255, 255, 0.1);
-          border-top-color: var(--accent);
-          border-right-color: var(--accent);
-          animation: spin 1.2s linear infinite;
         }
         .eval-phase {
           font-family: "JetBrains Mono", monospace;
@@ -174,84 +72,37 @@ export default function ScoringReveal({
           margin-left: 4px;
           animation: dotsPulse 1.4s ease-in-out infinite;
         }
-
-        /* ============ Error ============ */
-        .error {
-          text-align: center;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 16px;
-          max-width: 480px;
-        }
-        .error-heading {
-          font-family: "Inter Tight", sans-serif;
-          font-weight: 700;
-          font-size: 28px;
-          color: var(--ink);
-        }
-        .error-body {
-          font-size: 15px;
-          color: var(--ink-2);
-          line-height: 1.5;
-        }
-        .retry-btn {
-          margin-top: 16px;
-          background: var(--accent);
-          color: #fff;
-          border: none;
-          border-radius: 12px;
-          padding: 12px 28px;
-          font-size: 14px;
-          font-weight: 600;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-          cursor: pointer;
-          transition: background 200ms, transform 150ms;
-        }
-        .retry-btn:hover {
-          background: var(--accent-deep);
-          transform: translateY(-2px);
-        }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        @keyframes dotsPulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
-        }
+        @keyframes dotsPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
       `}</style>
     </div>
   );
 }
 
-function Revealed({ result, scenario, onContinue, onRestart, currentRound, isLastRound }) {
-  const { score, coaching } = result;
-  const [rubricVisible, setRubricVisible] = useState(false);
-  const [feedbackVisible, setFeedbackVisible] = useState(false);
+function ScoreBlock({ score, coaching, criteria, label, showChallenge = true, animate = true }) {
+  const [rubricVisible, setRubricVisible] = useState(!animate);
+  const [feedbackVisible, setFeedbackVisible] = useState(!animate);
 
   useEffect(() => {
+    if (!animate) return;
     const t1 = setTimeout(() => setRubricVisible(true), 1800);
     const t2 = setTimeout(() => setFeedbackVisible(true), 2800);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, []);
+  }, [animate]);
 
   const criteriaEntries = Object.entries(score.criteria || {});
-  const criteriaWeights = Object.fromEntries(
-    (scenario.motion.scoringCriteria || []).map((c) => [c.name, c.weight])
-  );
+  const criteriaWeights = Object.fromEntries((criteria || []).map((c) => [c.name, c.weight]));
 
   return (
-    <div className="revealed">
-      <div className="label interpretation">{coaching.scoreInterpretation}</div>
+    <div className="score-block">
+      {label && <div className="block-label">{label}</div>}
+      <div className="interpretation-label">{coaching.scoreInterpretation}</div>
       <div className="overall-score">
-        <ScoreCountUp target={score.overall} />
+        {animate ? <ScoreCountUp target={score.overall} /> : score.overall}
       </div>
-      <div className="label score-label">OUT OF 100</div>
+      <div className="score-label">OUT OF 100</div>
 
       {rubricVisible && (
         <div className="rubric">
@@ -264,10 +115,7 @@ function Revealed({ result, scenario, onContinue, onRestart, currentRound, isLas
                   <div className="crit-weight">{weight}% WEIGHT</div>
                 </div>
                 <div className="crit-bar-track">
-                  <div
-                    className="crit-bar-fill"
-                    style={{ width: `${value}%` }}
-                  />
+                  <div className="crit-bar-fill" style={{ width: `${value}%` }} />
                 </div>
                 <div className="crit-score">{value}</div>
               </div>
@@ -281,59 +129,47 @@ function Revealed({ result, scenario, onContinue, onRestart, currentRound, isLas
           <div className="feedback-block">
             <p className="main-feedback">{coaching.mainFeedback}</p>
           </div>
-          {coaching.strengths && coaching.strengths.length > 0 && (
+          {coaching.strengths?.length > 0 && (
             <div className="list-block">
               <div className="list-label">STRENGTHS</div>
-              <ul>
-                {coaching.strengths.map((s, i) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
+              <ul>{coaching.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
             </div>
           )}
-          {coaching.improvements && coaching.improvements.length > 0 && (
+          {coaching.improvements?.length > 0 && (
             <div className="list-block">
               <div className="list-label">WHERE TO PUSH</div>
-              <ul>
-                {coaching.improvements.map((s, i) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
+              <ul>{coaching.improvements.map((s, i) => <li key={i}>{s}</li>)}</ul>
             </div>
           )}
-          {coaching.coachChallenge && (
+          {showChallenge && coaching.coachChallenge && (
             <div className="challenge">
               <div className="list-label">COACH CHALLENGE</div>
               <p>{coaching.coachChallenge}</p>
             </div>
           )}
-
-          <div className="actions">
-            <button className="ghost-btn" onClick={onRestart}>
-              Start Over
-            </button>
-            <button className="primary-btn" onClick={onContinue}>
-              {isLastRound ? "View Final Score →" : `Continue to Round ${currentRound + 1} →`}
-            </button>
-          </div>
         </div>
       )}
 
       <style jsx>{`
-        .revealed {
+        .score-block {
+          text-align: center;
           max-width: 820px;
           width: 100%;
-          text-align: center;
-          padding: 32px 0;
-          animation: fadeUp 600ms cubic-bezier(0.22, 1, 0.36, 1);
+          margin: 0 auto;
         }
-        .label {
+        .block-label {
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--ink-3);
+          margin-bottom: 20px;
+        }
+        .interpretation-label {
           font-size: 11px;
           font-weight: 600;
           letter-spacing: 0.08em;
           text-transform: uppercase;
-        }
-        .interpretation {
           color: var(--accent);
           margin-bottom: 16px;
         }
@@ -348,10 +184,13 @@ function Revealed({ result, scenario, onContinue, onRestart, currentRound, isLas
           font-variant-numeric: tabular-nums;
         }
         .score-label {
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
           color: var(--ink-3);
           margin-bottom: 48px;
         }
-
         .rubric {
           display: flex;
           flex-direction: column;
@@ -364,20 +203,13 @@ function Revealed({ result, scenario, onContinue, onRestart, currentRound, isLas
           display: grid;
           grid-template-columns: 1fr auto;
           grid-template-rows: auto auto;
-          grid-template-areas:
-            "top score"
-            "bar bar";
+          grid-template-areas: "top score" "bar bar";
           gap: 8px 24px;
           align-items: center;
           opacity: 0;
           animation: fadeUp 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
         }
-        .crit-top {
-          grid-area: top;
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
+        .crit-top { grid-area: top; display: flex; align-items: center; gap: 12px; }
         .crit-name {
           font-family: "Inter Tight", sans-serif;
           font-weight: 600;
@@ -413,7 +245,6 @@ function Revealed({ result, scenario, onContinue, onRestart, currentRound, isLas
           color: var(--ink);
           font-variant-numeric: tabular-nums;
         }
-
         .feedback {
           text-align: left;
           max-width: 680px;
@@ -433,9 +264,7 @@ function Revealed({ result, scenario, onContinue, onRestart, currentRound, isLas
           color: var(--ink);
           font-style: italic;
         }
-        .list-block {
-          margin-bottom: 24px;
-        }
+        .list-block { margin-bottom: 24px; }
         .list-label {
           font-size: 11px;
           font-weight: 600;
@@ -477,6 +306,436 @@ function Revealed({ result, scenario, onContinue, onRestart, currentRound, isLas
           line-height: 1.5;
           color: var(--ink);
           margin-top: 8px;
+        }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
+    </div>
+  );
+}
+
+function WobblePrompt({ wobble, onSubmit, submitting }) {
+  const [response, setResponse] = useState("");
+  const canSubmit = response.trim().length >= 40 && !submitting;
+
+  return (
+    <div className="wobble">
+      <div className="wobble-banner">⚡ WOBBLE — A CURVEBALL HAS DROPPED</div>
+      <h2 className="wobble-title">{wobble.title}</h2>
+      <p className="wobble-desc">{wobble.description}</p>
+      <div className="wobble-question-label">YOUR RESPONSE</div>
+      <p className="wobble-question">{wobble.question}</p>
+      <textarea
+        className="wobble-input"
+        placeholder="Your adaptation goes here. Be specific."
+        value={response}
+        onChange={(e) => setResponse(e.target.value)}
+        disabled={submitting}
+      />
+      <div className="wobble-actions">
+        <div className="wobble-wordcount">
+          {response.trim().split(/\s+/).filter(Boolean).length} WORDS
+        </div>
+        <button
+          className={`submit-btn ${canSubmit ? "ready" : ""}`}
+          onClick={() => canSubmit && onSubmit(response)}
+          disabled={!canSubmit}
+        >
+          {submitting ? "EVALUATING…" : "SUBMIT WOBBLE RESPONSE →"}
+        </button>
+      </div>
+
+      <style jsx>{`
+        .wobble {
+          max-width: 820px;
+          width: 100%;
+          margin: 0 auto;
+          animation: fadeUp 600ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .wobble-banner {
+          display: inline-block;
+          background: rgba(232, 93, 46, 0.15);
+          border: 1px solid var(--accent);
+          color: var(--accent);
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          padding: 6px 14px;
+          border-radius: 999px;
+          margin-bottom: 24px;
+        }
+        .wobble-title {
+          font-family: "Inter Tight", sans-serif;
+          font-weight: 700;
+          font-size: 48px;
+          line-height: 1.1;
+          letter-spacing: -0.02em;
+          color: var(--ink);
+          margin-bottom: 16px;
+        }
+        .wobble-desc {
+          font-size: 18px;
+          line-height: 1.5;
+          color: var(--ink-2);
+          margin-bottom: 48px;
+          max-width: 720px;
+        }
+        .wobble-question-label {
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--ink-3);
+          margin-bottom: 8px;
+        }
+        .wobble-question {
+          font-family: "Inter Tight", sans-serif;
+          font-weight: 700;
+          font-size: 22px;
+          letter-spacing: -0.01em;
+          color: var(--ink);
+          margin-bottom: 24px;
+        }
+        .wobble-input {
+          width: 100%;
+          min-height: 180px;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 20px;
+          font-family: "Inter", sans-serif;
+          font-size: 15px;
+          line-height: 1.6;
+          color: var(--ink);
+          resize: vertical;
+          outline: none;
+          transition: border-color 150ms;
+        }
+        .wobble-input:focus {
+          border-color: var(--accent);
+        }
+        .wobble-input::placeholder {
+          color: var(--ink-3);
+        }
+        .wobble-actions {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-top: 20px;
+        }
+        .wobble-wordcount {
+          font-family: "JetBrains Mono", monospace;
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.08em;
+          color: var(--ink-3);
+        }
+        .submit-btn {
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--ink-3);
+          border: none;
+          border-radius: 12px;
+          padding: 14px 28px;
+          font-family: "Inter", sans-serif;
+          font-size: 14px;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          cursor: not-allowed;
+          transition: all 200ms;
+        }
+        .submit-btn.ready {
+          background: var(--accent);
+          color: #fff;
+          cursor: pointer;
+          box-shadow: 0 4px 14px rgba(232, 93, 46, 0.3);
+        }
+        .submit-btn.ready:hover {
+          background: var(--accent-deep);
+          transform: translateY(-2px);
+        }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
+    </div>
+  );
+}
+
+export default function ScoringReveal({
+  scenario,
+  submission,
+  onContinue,
+  onRestart,
+  currentRound = 1,
+  isLastRound = false,
+}) {
+  // Phase state machine:
+  // "evaluating-initial" → "revealed-initial" → "wobble-prompt" → "evaluating-wobble" → "revealed-final" → continue
+  const [phase, setPhase] = useState("evaluating-initial");
+  const [initialResult, setInitialResult] = useState(null);
+  const [wobbleResult, setWobbleResult] = useState(null);
+  const [wobbleResponse, setWobbleResponse] = useState("");
+  const [error, setError] = useState(null);
+  const scrollRef = useRef(null);
+
+  const motion = scenario?.motion;
+  const hasWobble = !!motion?.wobble;
+
+  // Initial scoring API call
+  useEffect(() => {
+    if (phase !== "evaluating-initial") return;
+    let cancelled = false;
+    async function score() {
+      try {
+        const res = await fetch("/api/score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ submission, scenario, phase: "initial" }),
+        });
+        if (!res.ok) throw new Error(`Scoring failed: ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setInitialResult(data);
+        setPhase("revealed-initial");
+      } catch (err) {
+        if (cancelled) return;
+        setError(err.message || "Something went wrong.");
+        setPhase("error");
+      }
+    }
+    score();
+    return () => { cancelled = true; };
+  }, [phase, scenario, submission]);
+
+  // Wobble scoring API call
+  useEffect(() => {
+    if (phase !== "evaluating-wobble") return;
+    let cancelled = false;
+    async function score() {
+      try {
+        const res = await fetch("/api/score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            submission,
+            scenario,
+            phase: "wobble",
+            wobbleResponse,
+          }),
+        });
+        if (!res.ok) throw new Error(`Wobble scoring failed: ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setWobbleResult(data);
+        setPhase("revealed-final");
+      } catch (err) {
+        if (cancelled) return;
+        setError(err.message || "Something went wrong on the wobble.");
+        setPhase("error");
+      }
+    }
+    score();
+    return () => { cancelled = true; };
+  }, [phase, scenario, submission, wobbleResponse]);
+
+  // Compute combined round score (70% initial, 30% wobble)
+  const computeRoundScore = () => {
+    const initial = initialResult?.score?.overall || 0;
+    const wobble = wobbleResult?.score?.overall || 0;
+    if (!wobbleResult) return initial;
+    return Math.round(initial * 0.7 + wobble * 0.3);
+  };
+
+  const handleContinueToWobble = () => {
+    setPhase("wobble-prompt");
+    // Scroll to top for the new view
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }, 100);
+  };
+
+  const handleWobbleSubmit = (response) => {
+    setWobbleResponse(response);
+    setPhase("evaluating-wobble");
+  };
+
+  const handleFinalContinue = () => {
+    onContinue(computeRoundScore());
+  };
+
+  return (
+    <div className="page" ref={scrollRef}>
+      {phase === "evaluating-initial" && <EvaluatingScreen phases={EVAL_PHASES_INITIAL} />}
+      {phase === "evaluating-wobble" && <EvaluatingScreen phases={EVAL_PHASES_WOBBLE} />}
+
+      {phase === "error" && (
+        <div className="error">
+          <div className="error-heading">Something went wrong.</div>
+          <div className="error-body">{error}</div>
+          <button
+            className="retry-btn"
+            onClick={() => {
+              setError(null);
+              setPhase(wobbleResult ? "revealed-final" : initialResult ? "wobble-prompt" : "evaluating-initial");
+            }}
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+
+      {phase === "revealed-initial" && initialResult && (
+        <div className="revealed">
+          <ScoreBlock
+            score={initialResult.score}
+            coaching={initialResult.coaching}
+            criteria={motion.scoringCriteria}
+            label="INITIAL STRATEGY"
+          />
+          <div className="actions">
+            <button className="ghost-btn" onClick={onRestart}>
+              Start Over
+            </button>
+            {hasWobble ? (
+              <button className="primary-btn" onClick={handleContinueToWobble}>
+                Continue to Wobble →
+              </button>
+            ) : (
+              <button className="primary-btn" onClick={handleFinalContinue}>
+                {isLastRound ? "View Final Score →" : `Continue to Round ${currentRound + 1} →`}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {phase === "wobble-prompt" && motion?.wobble && (
+        <WobblePrompt wobble={motion.wobble} onSubmit={handleWobbleSubmit} submitting={false} />
+      )}
+
+      {phase === "revealed-final" && initialResult && wobbleResult && (
+        <div className="revealed">
+          <ScoreBlock
+            score={wobbleResult.score}
+            coaching={wobbleResult.coaching}
+            criteria={motion.wobble.scoringCriteria}
+            label="WOBBLE — YOUR ADAPTATION"
+          />
+
+          <div className="combined-score">
+            <div className="combined-label">COMBINED ROUND SCORE</div>
+            <div className="combined-breakdown">
+              <div className="breakdown-item">
+                <div className="bd-num">{initialResult.score.overall}</div>
+                <div className="bd-label">INITIAL · 70%</div>
+              </div>
+              <div className="bd-op">+</div>
+              <div className="breakdown-item">
+                <div className="bd-num">{wobbleResult.score.overall}</div>
+                <div className="bd-label">WOBBLE · 30%</div>
+              </div>
+              <div className="bd-op">=</div>
+              <div className="breakdown-item primary">
+                <div className="bd-num"><ScoreCountUp target={computeRoundScore()} duration={1200} /></div>
+                <div className="bd-label">ROUND {String(currentRound).padStart(2, "0")}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="actions">
+            <button className="ghost-btn" onClick={onRestart}>
+              Start Over
+            </button>
+            <button className="primary-btn" onClick={handleFinalContinue}>
+              {isLastRound ? "View Final Score →" : `Continue to Round ${currentRound + 1} →`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        .page {
+          --canvas: #1A2C36;
+          --canvas-deep: #13222B;
+          --surface: rgba(255,255,255,0.05);
+          --ink: #F4F1EC;
+          --ink-2: rgba(244,241,236,0.72);
+          --ink-3: rgba(244,241,236,0.48);
+          --border: rgba(255,255,255,0.12);
+          --accent: #E85D2E;
+          --accent-deep: #FF7A4E;
+          min-height: 100vh;
+          width: 100%;
+          background: var(--canvas);
+          color: var(--ink);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 48px 32px;
+        }
+
+        .revealed {
+          max-width: 820px;
+          width: 100%;
+          padding: 32px 0;
+          animation: fadeUp 600ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .combined-score {
+          margin-top: 48px;
+          padding: 32px;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          text-align: center;
+          animation: fadeUp 500ms cubic-bezier(0.22, 1, 0.36, 1) 400ms both;
+        }
+        .combined-label {
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--ink-3);
+          margin-bottom: 24px;
+        }
+        .combined-breakdown {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 20px;
+          flex-wrap: wrap;
+        }
+        .breakdown-item {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+          min-width: 100px;
+        }
+        .breakdown-item.primary .bd-num {
+          color: var(--accent);
+          font-size: 64px;
+        }
+        .bd-num {
+          font-family: "JetBrains Mono", monospace;
+          font-weight: 500;
+          font-size: 36px;
+          line-height: 1;
+          color: var(--ink);
+          font-variant-numeric: tabular-nums;
+          letter-spacing: -0.02em;
+        }
+        .bd-label {
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--ink-3);
+        }
+        .bd-op {
+          font-family: "JetBrains Mono", monospace;
+          font-weight: 500;
+          font-size: 28px;
+          color: var(--ink-3);
         }
 
         .actions {
@@ -521,10 +780,45 @@ function Revealed({ result, scenario, onContinue, onRestart, currentRound, isLas
           box-shadow: 0 8px 20px rgba(232, 93, 46, 0.4);
         }
 
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
+        .error {
+          text-align: center;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+          max-width: 480px;
         }
+        .error-heading {
+          font-family: "Inter Tight", sans-serif;
+          font-weight: 700;
+          font-size: 28px;
+          color: var(--ink);
+        }
+        .error-body {
+          font-size: 15px;
+          color: var(--ink-2);
+          line-height: 1.5;
+        }
+        .retry-btn {
+          margin-top: 16px;
+          background: var(--accent);
+          color: #fff;
+          border: none;
+          border-radius: 12px;
+          padding: 12px 28px;
+          font-size: 14px;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          cursor: pointer;
+          transition: background 200ms, transform 150ms;
+        }
+        .retry-btn:hover {
+          background: var(--accent-deep);
+          transform: translateY(-2px);
+        }
+
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>
   );

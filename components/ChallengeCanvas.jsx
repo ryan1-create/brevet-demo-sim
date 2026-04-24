@@ -133,7 +133,7 @@ function FrameworkCard({ card, value, onChange, focused, onFocus, onBlur, fullWi
   );
 }
 
-export default function ChallengeCanvas({ scenario, teamName, currentRound, score, onSubmit }) {
+export default function ChallengeCanvas({ scenario, teamName, currentRound, score, onSubmit, onRoundChange }) {
   const frameworkCards = scenario?.motion?.frameworkCards || [];
   const [responses, setResponses] = useState(Array(frameworkCards.length).fill(""));
   const [focusedIndex, setFocusedIndex] = useState(null);
@@ -193,7 +193,7 @@ export default function ChallengeCanvas({ scenario, teamName, currentRound, scor
 
   return (
     <div className="page">
-      <NavBar currentRound={currentRound} teamName={teamName} score={score} />
+      <NavBar currentRound={currentRound} teamName={teamName} score={score} onRoundChange={onRoundChange} />
 
       {/* Challenge strip */}
       <div className="challenge-strip">
