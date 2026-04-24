@@ -81,6 +81,8 @@ function OpportunityPanel({ mission, challenge, dotColor }) {
 
 // =============================================================================
 // LAYOUT 1 — THREE-COL + FULL-WIDTH (Round 1 default)
+// Styles live in globals.css (.tc-*) to bypass styled-jsx scoping
+// issues with nested helper functions.
 // =============================================================================
 function ThreeColLayout({ cards, responses, setResponse, focused, setFocused, dotColor }) {
   const topCards = cards.slice(0, 3);
@@ -90,22 +92,24 @@ function ThreeColLayout({ cards, responses, setResponse, focused, setFocused, do
     const value = responses[`card_${idx}`] || "";
     const wordCount = value.trim().split(/\s+/).filter(Boolean).length;
     const isFocused = focused === `card_${idx}`;
+    const classes = [
+      "tc-card",
+      isFocused ? "tc-focused" : "",
+      fullWidth ? "tc-full" : "",
+    ].filter(Boolean).join(" ");
     return (
-      <div
-        key={card.number}
-        className={`card ${isFocused ? "focused" : ""} ${fullWidth ? "full" : ""}`}
-      >
-        <div className="card-header">
-          <div className="card-label">
-            <span className="dot" style={{ background: dotColor }} />
+      <div key={card.number} className={classes}>
+        <div className="tc-header">
+          <div className="tc-label">
+            <span className="tc-dot" style={{ background: dotColor }} />
             <span>{card.number} · {card.name}</span>
           </div>
-          <div className="word-count">{wordCount} WORDS</div>
+          <div className="tc-wordcount">{wordCount} WORDS</div>
         </div>
-        <h3 className="card-heading">{card.heading}</h3>
-        <p className="card-prompt">{card.prompt}</p>
+        <h3 className="tc-heading">{card.heading}</h3>
+        <p className="tc-prompt">{card.prompt}</p>
         <textarea
-          className="card-textarea"
+          className="tc-textarea"
           placeholder="Start typing. Your team's response goes here."
           value={value}
           onChange={(e) => setResponse(`card_${idx}`, e.target.value)}
@@ -117,111 +121,11 @@ function ThreeColLayout({ cards, responses, setResponse, focused, setFocused, do
   };
 
   return (
-    <div className="three-col">
-      <div className="top-row">
+    <div className="tc-wrap">
+      <div className="tc-top-row">
         {topCards.map((card, i) => renderCard(card, i, false))}
       </div>
       {bottomCard && renderCard(bottomCard, 3, true)}
-      <style jsx>{`
-        .three-col {
-          padding: 24px 32px;
-          display: flex;
-          flex-direction: column;
-          gap: 24px;
-        }
-        .top-row {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 24px;
-        }
-        .card {
-          background: var(--surface);
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          box-shadow: var(--elevation-1);
-          padding: 24px;
-          display: flex;
-          flex-direction: column;
-          height: 340px;
-          position: relative;
-          transition: border-color 150ms, box-shadow 150ms, transform 200ms;
-          overflow: hidden;
-        }
-        .card.full { height: 240px; }
-        .card.focused {
-          border-color: var(--ink);
-          box-shadow: var(--elevation-2);
-          transform: translateY(-1px);
-        }
-        .card.focused::before {
-          content: "";
-          position: absolute;
-          left: 0; top: 0; bottom: 0;
-          width: 3px;
-          background: var(--accent);
-        }
-        .card-header {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 12px;
-        }
-        .card-label {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: var(--ink-3);
-        }
-        .dot {
-          width: 6px; height: 6px;
-          border-radius: 999px;
-        }
-        .word-count {
-          font-family: "JetBrains Mono", monospace;
-          font-weight: 500;
-          font-size: 11px;
-          color: var(--ink-3);
-          letter-spacing: 0.04em;
-        }
-        .card-heading {
-          font-family: "Inter Tight", sans-serif;
-          font-weight: 700;
-          font-size: 22px;
-          line-height: 1.15;
-          letter-spacing: -0.015em;
-          color: var(--ink);
-          margin-bottom: 8px;
-        }
-        .card-prompt {
-          font-size: 13px;
-          font-style: italic;
-          color: var(--ink-2);
-          margin-bottom: 16px;
-          line-height: 1.5;
-        }
-        .card-textarea {
-          flex: 1;
-          border: none;
-          outline: none;
-          background: transparent;
-          font-family: "Inter", sans-serif;
-          font-size: 15px;
-          line-height: 1.6;
-          color: var(--ink);
-          resize: none;
-          padding: 0;
-        }
-        .card-textarea::placeholder {
-          color: var(--ink-3);
-          opacity: 0.7;
-        }
-        .card-textarea::selection {
-          background: var(--accent-soft);
-        }
-      `}</style>
     </div>
   );
 }
