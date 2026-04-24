@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getMockLeaderboard } from "@/lib/mockLeaderboard";
 import { MOTIONS, MOTION_ORDER } from "@/lib/scenarios";
 
@@ -16,26 +16,33 @@ export default function NavBar({
   onRoundChange,
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [roundMenuOpen, setRoundMenuOpen] = useState(false);
+  const roundMenuRef = useRef(null);
   const leaderboard = getMockLeaderboard(teamName, score);
   const myRank = leaderboard.find((r) => r.isYou)?.rank || 3;
 
+  // Close round menu on outside click
+  useEffect(() => {
+    if (!roundMenuOpen) return;
+    const onClick = (e) => {
+      if (roundMenuRef.current && !roundMenuRef.current.contains(e.target)) {
+        setRoundMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [roundMenuOpen]);
+
+  const jumpToRound = (roundNumber) => {
+    setRoundMenuOpen(false);
+    onRoundChange && onRoundChange(roundNumber);
+  };
+
   const renderDot = (i) => {
     const roundNumber = i + 1;
-    const label = `Round ${String(roundNumber).padStart(2, "0")} · ${ROUND_LABELS[i]}`;
     const state =
       i < currentRound - 1 ? "completed" : i === currentRound - 1 ? "current" : "upcoming";
-    return (
-      <button
-        key={i}
-        className={`dot-btn ${state}`}
-        title={label}
-        aria-label={label}
-        onClick={() => onRoundChange && onRoundChange(roundNumber)}
-        type="button"
-      >
-        <span className={`dot ${state}`} />
-      </button>
-    );
+    return <span key={i} className={`dot ${state}`} />;
   };
 
   return (
@@ -54,11 +61,46 @@ export default function NavBar({
           <div className="sub-label">SALES SIMULATION</div>
         </div>
 
-        <div className="nav-center">
-          <div className="round-label">
-            ROUND {String(currentRound).padStart(2, "0")} OF 04
-          </div>
-          <div className="dots">{[0, 1, 2, 3].map(renderDot)}</div>
+        <div className="nav-center" ref={roundMenuRef}>
+          <button
+            className={`round-trigger ${roundMenuOpen ? "open" : ""}`}
+            onClick={() => setRoundMenuOpen((o) => !o)}
+            type="button"
+            aria-haspopup="true"
+            aria-expanded={roundMenuOpen}
+          >
+            <span className="round-label">
+              ROUND {String(currentRound).padStart(2, "0")} · {ROUND_LABELS[currentRound - 1]?.toUpperCase()}
+            </span>
+            <span className="dots">{[0, 1, 2, 3].map(renderDot)}</span>
+            <svg className="caret" width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M2 3.5 L5 6.5 L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+
+          {roundMenuOpen && (
+            <div className="round-menu" role="menu">
+              {ROUND_LABELS.map((name, i) => {
+                const roundNumber = i + 1;
+                const isCurrent = roundNumber === currentRound;
+                const motion = Object.values(MOTIONS).find((m) => m.id === MOTION_ORDER[i]);
+                return (
+                  <button
+                    key={roundNumber}
+                    className={`round-option ${isCurrent ? "current" : ""}`}
+                    onClick={() => jumpToRound(roundNumber)}
+                    type="button"
+                    role="menuitem"
+                  >
+                    <span className="opt-dot" style={{ background: motion?.roundColor || "#888" }} />
+                    <span className="opt-num">ROUND {String(roundNumber).padStart(2, "0")}</span>
+                    <span className="opt-name">{name}</span>
+                    {isCurrent && <span className="opt-badge">CURRENT</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="nav-right">
@@ -190,7 +232,24 @@ export default function NavBar({
           transform: translate(-50%, -50%);
           display: flex;
           align-items: center;
-          gap: 16px;
+        }
+        .round-trigger {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          background: transparent;
+          border: 1px solid transparent;
+          padding: 8px 14px;
+          border-radius: 999px;
+          cursor: pointer;
+          font: inherit;
+          transition: background 150ms var(--ease-state), border-color 150ms var(--ease-state);
+          color: inherit;
+        }
+        .round-trigger:hover,
+        .round-trigger.open {
+          background: rgba(15, 27, 34, 0.04);
+          border-color: var(--border);
         }
         .round-label {
           font-family: "Inter", sans-serif;
@@ -199,37 +258,19 @@ export default function NavBar({
           letter-spacing: 0.06em;
           text-transform: uppercase;
           color: var(--ink-2);
+          white-space: nowrap;
         }
         .dots {
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          gap: 4px;
-        }
-        .dot-btn {
-          background: none;
-          border: none;
-          padding: 8px;
-          margin: -8px 0;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 999px;
-          transition: background 150ms var(--ease-state);
-        }
-        .dot-btn:hover {
-          background: rgba(15, 27, 34, 0.06);
-        }
-        .dot-btn:focus-visible {
-          outline: 2px solid var(--accent);
-          outline-offset: 1px;
+          gap: 6px;
         }
         .dot {
+          display: inline-block;
           width: 8px;
           height: 8px;
           border-radius: 999px;
           box-sizing: border-box;
-          transition: background 150ms var(--ease-state), border-color 150ms var(--ease-state);
         }
         .dot.completed {
           background: var(--ink);
@@ -244,8 +285,82 @@ export default function NavBar({
           background: transparent;
           border: 1px solid var(--border-strong);
         }
-        .dot-btn:hover .dot.upcoming {
-          border-color: var(--ink-2);
+        .caret {
+          color: var(--ink-3);
+          transition: transform 200ms var(--ease-state);
+          flex-shrink: 0;
+        }
+        .round-trigger.open .caret {
+          transform: rotate(180deg);
+        }
+
+        .round-menu {
+          position: absolute;
+          top: calc(100% + 6px);
+          left: 50%;
+          transform: translateX(-50%);
+          min-width: 340px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 8px;
+          box-shadow: 0 12px 32px rgba(15, 27, 34, 0.12), 0 4px 12px rgba(15, 27, 34, 0.06);
+          z-index: 30;
+          animation: menuIn 180ms var(--ease-state);
+        }
+        @keyframes menuIn {
+          from { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+          to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        .round-option {
+          display: grid;
+          grid-template-columns: 10px auto 1fr auto;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+          background: transparent;
+          border: none;
+          padding: 10px 12px;
+          border-radius: 8px;
+          cursor: pointer;
+          font: inherit;
+          text-align: left;
+          color: var(--ink);
+          transition: background 120ms var(--ease-state);
+        }
+        .round-option:hover {
+          background: var(--surface-2);
+        }
+        .round-option.current {
+          background: rgba(232, 93, 46, 0.08);
+        }
+        .opt-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          display: inline-block;
+        }
+        .opt-num {
+          font-family: "JetBrains Mono", monospace;
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.06em;
+          color: var(--ink-3);
+        }
+        .opt-name {
+          font-family: "Inter Tight", sans-serif;
+          font-weight: 600;
+          font-size: 14px;
+          color: var(--ink);
+        }
+        .opt-badge {
+          font-size: 9px;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          color: var(--accent);
+          padding: 2px 6px;
+          border: 1px solid var(--accent);
+          border-radius: 999px;
         }
         @keyframes dotPulse {
           0%, 100% { transform: scale(1); }

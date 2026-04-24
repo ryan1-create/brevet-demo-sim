@@ -80,6 +80,94 @@ function generateGarbageScore(criteria, qualityResult) {
   };
 }
 
+// Structured wobble scoring (choice / ranking / multi-select)
+function interpretationFromScore(score) {
+  if (score >= 90) return "Championship Caliber";
+  if (score >= 75) return "Strong Contender";
+  if (score >= 55) return "Building Momentum";
+  if (score >= 35) return "Foundation Phase";
+  return "Needs Development";
+}
+function tierFromScore(score) {
+  if (score >= 85) return "excellent";
+  if (score >= 65) return "good";
+  if (score >= 40) return "average";
+  return "poor";
+}
+function computeStructuredWobbleScore(wobble, response) {
+  const type = wobble.type;
+  let overall = wobble.defaultScore ?? 40;
+  let coachCopy = "";
+  let strengths = [];
+  let improvements = [];
+  let criteriaScores = {};
+
+  if (type === "choice") {
+    const chosenOption = (wobble.options || []).find((o) => o.id === response);
+    overall = chosenOption?.points ?? 40;
+    coachCopy = wobble.scoringCopy?.[response] || "";
+    criteriaScores = { "Decision Quality": overall };
+    if (overall >= 75) {
+      strengths = ["Picked the executive-grade move under pressure."];
+      improvements = ["Make sure your follow-through matches the quality of the decision."];
+    } else if (overall >= 50) {
+      strengths = ["You didn't panic or concede."];
+      improvements = ["There was a stronger move available."];
+    } else {
+      strengths = ["You engaged with the curveball instead of ignoring it."];
+      improvements = [
+        "This move plays the game on the other side's terms.",
+        "Strong sellers change the frame instead of arguing within it.",
+      ];
+    }
+  } else if (type === "ranking") {
+    overall = wobble.rankingScores?.[response] ?? wobble.defaultScore ?? 40;
+    const tier = tierFromScore(overall);
+    coachCopy = wobble.scoringCopy?.[tier] || "";
+    criteriaScores = { "Sequencing": overall };
+    if (tier === "excellent" || tier === "good") {
+      strengths = ["Sequenced the moves in the right order for the political reality."];
+      improvements = ["Translate the sequencing into a concrete 30/60/90 plan."];
+    } else {
+      strengths = ["You had a plan — not every seller does."];
+      improvements = [
+        "The order of moves matters. Commercial concessions early signal desperation.",
+        "What does the NEW exec need to see from you first?",
+      ];
+    }
+  } else if (type === "multi-select") {
+    const sortedKey = response.split(",").sort().join(",");
+    const scoreTable = wobble.multiSelectScores || {};
+    overall = scoreTable[sortedKey] ?? scoreTable[response] ?? wobble.defaultScore ?? 40;
+    const tier = tierFromScore(overall);
+    coachCopy = wobble.scoringCopy?.[tier] || "";
+    criteriaScores = { "Move Pairing": overall };
+    if (tier === "excellent" || tier === "good") {
+      strengths = ["Two complementary moves that reinforce each other."];
+      improvements = ["Build the 60-day execution plan that makes both visible."];
+    } else {
+      strengths = ["You made a choice — indecision is the worst outcome here."];
+      improvements = [
+        "One of your two moves may be undercutting the other.",
+        "The best pairs work together: one creates narrative, the other provides political cover.",
+      ];
+    }
+  }
+
+  return {
+    score: { overall, criteria: criteriaScores, timestamp: new Date().toISOString() },
+    coaching: {
+      tone: overall >= 75 ? "good" : overall >= 55 ? "developing" : "needs_work",
+      mainFeedback: coachCopy || "No coaching notes available for this response.",
+      strengths,
+      improvements,
+      coachChallenge: "In the real deal, what would you do in the next 24 hours to compound this move?",
+      scoreInterpretation: interpretationFromScore(overall),
+    },
+    isStructured: true,
+  };
+}
+
 function validateAndAdjustScores(scores) {
   const values = Object.values(scores);
   if (values.length <= 1) return scores;
@@ -119,6 +207,15 @@ export async function POST(req) {
   }
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: "Server missing API key" }, { status: 500 });
+  }
+
+  const wobbleType = scenario.motion.wobble?.type || "text";
+  const isStructuredWobble = isWobble && wobbleType !== "text";
+
+  if (isStructuredWobble) {
+    console.log("[score:app] Structured wobble, type:", wobbleType);
+    const result = computeStructuredWobbleScore(scenario.motion.wobble, wobbleResponse);
+    return Response.json(result);
   }
 
   const activeCriteria = isWobble

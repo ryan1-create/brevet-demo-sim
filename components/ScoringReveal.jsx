@@ -314,30 +314,211 @@ function ScoreBlock({ score, coaching, criteria, label, showChallenge = true, an
 }
 
 function WobblePrompt({ wobble, onSubmit, submitting }) {
-  const [response, setResponse] = useState("");
-  const canSubmit = response.trim().length >= 40 && !submitting;
+  const type = wobble?.type || "text";
+
+  // State per type
+  const [textResponse, setTextResponse] = useState("");
+  const [choiceId, setChoiceId] = useState(null);
+  const [ranking, setRanking] = useState([]); // ordered list of option ids
+  const [multiSelection, setMultiSelection] = useState([]);
+
+  // Validation per type
+  let canSubmit = false;
+  let buildPayload = () => null;
+  if (type === "text") {
+    canSubmit = textResponse.trim().length >= 40 && !submitting;
+    buildPayload = () => textResponse.trim();
+  } else if (type === "choice") {
+    canSubmit = !!choiceId && !submitting;
+    buildPayload = () => choiceId;
+  } else if (type === "ranking") {
+    canSubmit = ranking.length === (wobble.options?.length || 0) && !submitting;
+    buildPayload = () => ranking.join(",");
+  } else if (type === "multi-select") {
+    canSubmit = multiSelection.length === (wobble.maxSelections || 2) && !submitting;
+    buildPayload = () => [...multiSelection].sort().join(",");
+  }
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    onSubmit(buildPayload());
+  };
+
+  // Ranking handlers
+  const unrankedOptions = (wobble.options || []).filter((o) => !ranking.includes(o.id));
+  const addToRanking = (id) => setRanking((r) => [...r, id]);
+  const removeFromRanking = (id) => setRanking((r) => r.filter((x) => x !== id));
+
+  // Multi-select handlers
+  const toggleMulti = (id) => {
+    setMultiSelection((sel) => {
+      if (sel.includes(id)) return sel.filter((x) => x !== id);
+      if (sel.length >= (wobble.maxSelections || 2)) return sel;
+      return [...sel, id];
+    });
+  };
+
+  // Dynamic prompt + input label per type
+  const promptText = wobble.prompt || wobble.question || "";
 
   return (
     <div className="wobble">
       <div className="wobble-banner">⚡ WOBBLE — A CURVEBALL HAS DROPPED</div>
       <h2 className="wobble-title">{wobble.title}</h2>
       <p className="wobble-desc">{wobble.description}</p>
-      <div className="wobble-question-label">YOUR RESPONSE</div>
-      <p className="wobble-question">{wobble.question}</p>
-      <textarea
-        className="wobble-input"
-        placeholder="Your adaptation goes here. Be specific."
-        value={response}
-        onChange={(e) => setResponse(e.target.value)}
-        disabled={submitting}
-      />
-      <div className="wobble-actions">
-        <div className="wobble-wordcount">
-          {response.trim().split(/\s+/).filter(Boolean).length} WORDS
+
+      <div className="wobble-prompt-label">
+        {type === "text" && "YOUR RESPONSE"}
+        {type === "choice" && "CHOOSE ONE"}
+        {type === "ranking" && "RANK IN ORDER"}
+        {type === "multi-select" && `PICK ${wobble.maxSelections || 2}`}
+      </div>
+      <p className="wobble-prompt">{promptText}</p>
+
+      {/* TEXT INPUT */}
+      {type === "text" && (
+        <>
+          <textarea
+            className="wobble-input"
+            placeholder="Your adaptation goes here. Be specific."
+            value={textResponse}
+            onChange={(e) => setTextResponse(e.target.value)}
+            disabled={submitting}
+          />
+          <div className="wobble-sub">
+            <span className="wobble-meta">
+              {textResponse.trim().split(/\s+/).filter(Boolean).length} WORDS
+            </span>
+          </div>
+        </>
+      )}
+
+      {/* CHOICE INPUT */}
+      {type === "choice" && (
+        <div className="options">
+          {wobble.options.map((opt) => {
+            const selected = choiceId === opt.id;
+            return (
+              <button
+                key={opt.id}
+                className={`option-card ${selected ? "selected" : ""}`}
+                onClick={() => setChoiceId(opt.id)}
+                type="button"
+                disabled={submitting}
+              >
+                <div className={`option-indicator ${selected ? "filled" : ""}`}>
+                  {selected && (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M2.5 6.5 L5 9 L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </div>
+                <div className="option-body">
+                  <div className="option-letter">{opt.id}</div>
+                  <div className="option-text">{opt.text}</div>
+                  <div className="option-detail">{opt.detail}</div>
+                </div>
+              </button>
+            );
+          })}
         </div>
+      )}
+
+      {/* RANKING INPUT */}
+      {type === "ranking" && (
+        <div className="ranking-wrap">
+          {unrankedOptions.length > 0 && (
+            <div className="ranking-pool">
+              <div className="ranking-section-label">CLICK TO ADD TO YOUR RANKING</div>
+              {unrankedOptions.map((opt) => (
+                <button
+                  key={opt.id}
+                  className="ranking-pool-item"
+                  onClick={() => addToRanking(opt.id)}
+                  type="button"
+                  disabled={submitting}
+                >
+                  <div className="option-letter small">{opt.id}</div>
+                  <div className="option-body-inline">
+                    <div className="option-text">{opt.text}</div>
+                    <div className="option-detail">{opt.detail}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {ranking.length > 0 && (
+            <div className="ranking-list">
+              <div className="ranking-section-label">YOUR RANKING</div>
+              {ranking.map((id, idx) => {
+                const opt = wobble.options.find((o) => o.id === id);
+                return (
+                  <div key={id} className="ranking-item">
+                    <div className="ranking-rank">{idx + 1}</div>
+                    <div className="option-body-inline">
+                      <div className="option-text">{opt.text}</div>
+                      <div className="option-detail">{opt.detail}</div>
+                    </div>
+                    <button
+                      className="ranking-remove"
+                      onClick={() => removeFromRanking(id)}
+                      type="button"
+                      aria-label="Remove"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path d="M3 3 L9 9 M9 3 L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MULTI-SELECT INPUT */}
+      {type === "multi-select" && (
+        <div className="options">
+          {wobble.options.map((opt) => {
+            const selected = multiSelection.includes(opt.id);
+            const atCap =
+              multiSelection.length >= (wobble.maxSelections || 2) && !selected;
+            return (
+              <button
+                key={opt.id}
+                className={`option-card ${selected ? "selected" : ""} ${atCap ? "disabled" : ""}`}
+                onClick={() => !atCap && toggleMulti(opt.id)}
+                type="button"
+                disabled={submitting || atCap}
+              >
+                <div className={`option-indicator square ${selected ? "filled" : ""}`}>
+                  {selected && (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M2.5 6.5 L5 9 L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </div>
+                <div className="option-body">
+                  <div className="option-letter">{opt.id}</div>
+                  <div className="option-text">{opt.text}</div>
+                  <div className="option-detail">{opt.detail}</div>
+                </div>
+              </button>
+            );
+          })}
+          <div className="wobble-sub">
+            <span className="wobble-meta">
+              {multiSelection.length} OF {wobble.maxSelections || 2} SELECTED
+            </span>
+          </div>
+        </div>
+      )}
+
+      <div className="wobble-actions">
         <button
           className={`submit-btn ${canSubmit ? "ready" : ""}`}
-          onClick={() => canSubmit && onSubmit(response)}
+          onClick={handleSubmit}
           disabled={!canSubmit}
         >
           {submitting ? "EVALUATING…" : "SUBMIT WOBBLE RESPONSE →"}
@@ -367,20 +548,20 @@ function WobblePrompt({ wobble, onSubmit, submitting }) {
         .wobble-title {
           font-family: "Inter Tight", sans-serif;
           font-weight: 700;
-          font-size: 48px;
+          font-size: 44px;
           line-height: 1.1;
           letter-spacing: -0.02em;
           color: var(--ink);
           margin-bottom: 16px;
         }
         .wobble-desc {
-          font-size: 18px;
-          line-height: 1.5;
+          font-size: 17px;
+          line-height: 1.55;
           color: var(--ink-2);
-          margin-bottom: 48px;
+          margin-bottom: 40px;
           max-width: 720px;
         }
-        .wobble-question-label {
+        .wobble-prompt-label {
           font-size: 11px;
           font-weight: 600;
           letter-spacing: 0.08em;
@@ -388,7 +569,7 @@ function WobblePrompt({ wobble, onSubmit, submitting }) {
           color: var(--ink-3);
           margin-bottom: 8px;
         }
-        .wobble-question {
+        .wobble-prompt {
           font-family: "Inter Tight", sans-serif;
           font-weight: 700;
           font-size: 22px;
@@ -396,6 +577,8 @@ function WobblePrompt({ wobble, onSubmit, submitting }) {
           color: var(--ink);
           margin-bottom: 24px;
         }
+
+        /* Text input */
         .wobble-input {
           width: 100%;
           min-height: 180px;
@@ -417,18 +600,200 @@ function WobblePrompt({ wobble, onSubmit, submitting }) {
         .wobble-input::placeholder {
           color: var(--ink-3);
         }
-        .wobble-actions {
+        .wobble-sub {
           display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-top: 20px;
+          justify-content: flex-end;
+          margin-top: 10px;
         }
-        .wobble-wordcount {
+        .wobble-meta {
           font-family: "JetBrains Mono", monospace;
           font-size: 11px;
           font-weight: 500;
           letter-spacing: 0.08em;
           color: var(--ink-3);
+        }
+
+        /* Options (choice + multi-select) */
+        .options {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .option-card {
+          display: grid;
+          grid-template-columns: 32px 1fr;
+          gap: 16px;
+          align-items: flex-start;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 16px 18px;
+          cursor: pointer;
+          text-align: left;
+          font: inherit;
+          color: var(--ink);
+          transition: background 150ms, border-color 150ms, transform 120ms;
+        }
+        .option-card:not(.disabled):hover {
+          background: rgba(255, 255, 255, 0.06);
+          border-color: rgba(255, 255, 255, 0.22);
+        }
+        .option-card.selected {
+          background: rgba(232, 93, 46, 0.1);
+          border-color: var(--accent);
+        }
+        .option-card.disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        .option-indicator {
+          width: 24px;
+          height: 24px;
+          border-radius: 999px;
+          border: 1.5px solid var(--border);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-top: 2px;
+          transition: background 150ms, border-color 150ms;
+        }
+        .option-indicator.square {
+          border-radius: 6px;
+        }
+        .option-indicator.filled {
+          background: var(--accent);
+          border-color: var(--accent);
+        }
+        .option-body {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .option-letter {
+          font-family: "JetBrains Mono", monospace;
+          font-size: 10px;
+          font-weight: 500;
+          letter-spacing: 0.1em;
+          color: var(--ink-3);
+        }
+        .option-letter.small {
+          font-size: 11px;
+        }
+        .option-text {
+          font-family: "Inter Tight", sans-serif;
+          font-weight: 600;
+          font-size: 16px;
+          letter-spacing: -0.01em;
+          color: var(--ink);
+        }
+        .option-detail {
+          font-size: 14px;
+          color: var(--ink-2);
+          line-height: 1.4;
+          margin-top: 2px;
+        }
+
+        /* Ranking */
+        .ranking-wrap {
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+        }
+        .ranking-section-label {
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--ink-3);
+          margin-bottom: 12px;
+        }
+        .ranking-pool {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .ranking-pool-item {
+          display: grid;
+          grid-template-columns: 24px 1fr;
+          gap: 14px;
+          align-items: flex-start;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 14px 16px;
+          cursor: pointer;
+          text-align: left;
+          font: inherit;
+          color: var(--ink);
+          transition: all 150ms;
+        }
+        .ranking-pool-item:hover {
+          background: rgba(255, 255, 255, 0.06);
+          border-color: rgba(255, 255, 255, 0.22);
+          transform: translateX(2px);
+        }
+        .ranking-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .ranking-item {
+          display: grid;
+          grid-template-columns: 40px 1fr 32px;
+          align-items: center;
+          gap: 14px;
+          background: rgba(232, 93, 46, 0.08);
+          border: 1px solid rgba(232, 93, 46, 0.3);
+          border-radius: 10px;
+          padding: 14px 16px;
+          animation: rankIn 250ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .ranking-rank {
+          width: 32px;
+          height: 32px;
+          border-radius: 999px;
+          background: var(--accent);
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: "JetBrains Mono", monospace;
+          font-size: 14px;
+          font-weight: 500;
+        }
+        .ranking-remove {
+          width: 28px;
+          height: 28px;
+          border-radius: 6px;
+          background: transparent;
+          border: none;
+          color: var(--ink-3);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 150ms, color 150ms;
+        }
+        .ranking-remove:hover {
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--ink);
+        }
+        .option-body-inline {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+        }
+
+        @keyframes rankIn {
+          from { opacity: 0; transform: translateY(-4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .wobble-actions {
+          display: flex;
+          justify-content: flex-end;
+          margin-top: 28px;
         }
         .submit-btn {
           background: rgba(255, 255, 255, 0.08);
@@ -617,7 +982,13 @@ export default function ScoringReveal({
           <ScoreBlock
             score={wobbleResult.score}
             coaching={wobbleResult.coaching}
-            criteria={motion.wobble.scoringCriteria}
+            criteria={
+              motion.wobble?.scoringCriteria ||
+              Object.keys(wobbleResult.score?.criteria || {}).map((name) => ({
+                name,
+                weight: 100,
+              }))
+            }
             label="WOBBLE — YOUR ADAPTATION"
           />
 

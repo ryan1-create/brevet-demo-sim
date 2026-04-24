@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Welcome from "@/components/Welcome";
 import ScenarioBrief from "@/components/ScenarioBrief";
 import ChallengeCanvas from "@/components/ChallengeCanvas";
@@ -22,6 +22,14 @@ export default function Home() {
 
   const currentMotionId = getMotionForRound(currentRound);
   const scenario = industryId ? getScenario(industryId, currentMotionId) : null;
+
+  // Reset scroll to top whenever we change stage or round — prevents landing
+  // on a new screen that's already scrolled down.
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }
+  }, [stage, currentRound]);
 
   const handleStart = ({ industryId: id, teamName: name }) => {
     setIndustryId(id);
